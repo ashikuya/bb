@@ -1,0 +1,24 @@
+:global(body) {
+  margin: 0;
+}
+
+:global(:root) {
+  --kael-bg: #05070c;
+  --kael-bg-soft: #0a0f18;
+  --kael-panel: rgba(12, 20, 32, 0.72);
+  --kael-panel-border: rgba(78, 165, 211, 0.28);
+  --kael-frost: #6fd3ff;
+  --kael-frost-bright: #b8ecff;
+  --kael-frost-deep: #2a7fb8;
+  --kael-gold: #e8c373;
+  --kael-text: #cdd9e6;
+  --kael-text-dim: #8294a8;
+  --kael-heading: #eaf6ff;
+  --kael-shadow-glow: 0 0 24px rgba(78, 165, 211, 0.35);
+  --kael-font-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+  --kael-font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+:global(*) {
+  box-sizing: border-box;
+}
