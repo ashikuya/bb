@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 from typing import Optional, List
 import os, uuid, re, logging, secrets
 
+import srp6
+import acore_db
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -82,24 +85,34 @@ class PostIn(BaseModel):
 async def register(body: RegisterIn, response: Response):
     if not USERNAME_RE.match(body.username):
         raise HTTPException(400, detail={"error": "Username must be 3-16 letters or numbers."})
-    if len(body.password) < 4 or len(body.password) > 64:
-        raise HTTPException(400, detail={"error": "Password must be 4-64 characters."})
+    if len(body.password) < 4 or len(body.password) > 16:
+        raise HTTPException(400, detail={"error": "Password must be 4-16 characters."})
+
     uname = body.username.lower()
     if await db.accounts.find_one({"username": uname}):
         raise HTTPException(400, detail={"error": "Username already taken."})
     if await db.accounts.find_one({"email": body.email.lower()}):
         raise HTTPException(400, detail={"error": "Email already registered."})
 
-    counter = await db.counters.find_one_and_update(
-        {"_id": "accountId"}, {"$inc": {"seq": 1}},
-        upsert=True, return_document=True,
-    )
-    acc_id = counter["seq"]
+    ac_id = None
+    if acore_db.enabled():
+        existing = await acore_db.find_account(uname)
+        if existing:
+            raise HTTPException(400, detail={"error": "Username already taken in game."})
+        salt, verifier = srp6.build(uname, body.password)
+        ac_id = await acore_db.create_account(uname, body.email.lower(), salt, verifier)
+        acc_id = int(ac_id)
+    else:
+        counter = await db.counters.find_one_and_update(
+            {"_id": "accountId"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True,
+        )
+        acc_id = counter["seq"]
+
     acc = {
         "id": acc_id,
         "username": uname,
         "email": body.email.lower(),
-        "passwordHash": bcrypt.hash(body.password),
+        "passwordHash": bcrypt.hash(body.password),  # for web-login fallback
         "joinDate": now_iso(),
         "lastLogin": None,
     }
@@ -114,9 +127,34 @@ async def register(body: RegisterIn, response: Response):
 async def login(body: LoginIn, response: Response):
     uname = body.username.lower()
     acc = await db.accounts.find_one({"username": uname})
-    if not acc or not bcrypt.verify(body.password, acc["passwordHash"]):
+
+    # Verify against AzerothCore if enabled, otherwise bcrypt
+    ok = False
+    if acore_db.enabled():
+        ac_acc = await acore_db.find_account(uname)
+        if ac_acc and srp6.verify_password(uname, body.password, ac_acc["salt"], ac_acc["verifier"]):
+            ok = True
+            if not acc:
+                # AC account exists but no web profile yet → create one
+                acc = {
+                    "id": ac_acc["id"], "username": uname,
+                    "email": ac_acc.get("email") or "",
+                    "passwordHash": bcrypt.hash(body.password),
+                    "joinDate": str(ac_acc.get("joindate") or now_iso()),
+                    "lastLogin": None,
+                }
+                await db.accounts.insert_one(acc)
+    elif acc and bcrypt.verify(body.password, acc["passwordHash"]):
+        ok = True
+
+    if not ok or not acc:
         raise HTTPException(401, detail={"error": "Invalid credentials."})
+
     await db.accounts.update_one({"id": acc["id"]}, {"$set": {"lastLogin": now_iso()}})
+    if acore_db.enabled():
+        try: await acore_db.touch_login(acc["id"])
+        except Exception as e: log.warning("touch_login failed: %s", e)
+
     sid = secrets.token_urlsafe(32)
     await db.sessions.insert_one({"_id": sid, "accountId": acc["id"], "createdAt": now_iso()})
     response.set_cookie(SESSION_COOKIE, sid, httponly=True, samesite="lax", max_age=60*60*24*30)
@@ -137,19 +175,29 @@ async def me(acc: dict = Depends(require_account)):
 
 @api.post("/account/password")
 async def change_pw(body: PwChange, acc: dict = Depends(require_account)):
-    if len(body.newPassword) < 4:
-        raise HTTPException(400, detail={"error": "Password too short."})
+    if len(body.newPassword) < 4 or len(body.newPassword) > 16:
+        raise HTTPException(400, detail={"error": "Password must be 4-16 characters."})
     await db.accounts.update_one(
         {"id": acc["id"]}, {"$set": {"passwordHash": bcrypt.hash(body.newPassword)}}
     )
+    if acore_db.enabled():
+        salt, verifier = srp6.build(acc["username"], body.newPassword)
+        try: await acore_db.update_password(acc["id"], salt, verifier)
+        except Exception as e: log.warning("AC password update failed: %s", e)
     return {"ok": True}
 
-# ── Characters (demo data; real version queries AzerothCore characters DB) ──
+# ── Characters ──────────────────────────────────────────────────────────────
 @api.get("/characters")
 async def characters(acc: dict = Depends(require_account)):
+    if acore_db.enabled():
+        try:
+            chars = await acore_db.list_characters(acc["id"])
+            return {"characters": chars}
+        except Exception as e:
+            log.warning("AC characters fetch failed: %s", e)
+
     chars = await db.characters.find({"accountId": acc["id"]}).to_list(50)
     if not chars:
-        # demo characters for new accounts
         demo = [
             {"guid": acc["id"] * 100 + 1, "accountId": acc["id"], "name": acc["username"].title(),
              "level": 80, "race": 10, "class": 9, "gender": 0, "money": 1234567,
@@ -165,35 +213,26 @@ async def characters(acc: dict = Depends(require_account)):
 # ── Status / Live Stats ─────────────────────────────────────────────────────
 @api.get("/status")
 async def status():
-    accounts = await db.accounts.count_documents({})
-    characters = await db.characters.count_documents({})
-    # Try AzerothCore auth DB if configured
-    online = 0
-    try:
-        ac_host = os.environ.get("AC_AUTH_HOST")
-        if ac_host:
-            import aiomysql
-            conn = await aiomysql.connect(
-                host=ac_host,
-                port=int(os.environ.get("AC_AUTH_PORT", 3306)),
-                user=os.environ.get("AC_DB_USER", "acore"),
-                password=os.environ.get("AC_DB_PASS", ""),
-                db=os.environ.get("AC_AUTH_DB", "acore_auth"),
-            )
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT COUNT(*) FROM account WHERE online=1")
-                (online,) = await cur.fetchone()
-                await cur.execute("SELECT COUNT(*) FROM account")
-                (accounts,) = await cur.fetchone()
-            conn.close()
-    except Exception as e:
-        log.warning("AzerothCore stats unavailable: %s", e)
+    web_accounts = await db.accounts.count_documents({})
+    web_characters = await db.characters.count_documents({})
 
-    # fall back to demo numbers if zero
+    accounts = web_accounts
+    characters = web_characters
+    online = 0
+
+    if acore_db.enabled():
+        try:
+            s = await acore_db.stats()
+            accounts = s["accounts"]
+            characters = s["characters"]
+            online = s["online"]
+        except Exception as e:
+            log.warning("AzerothCore stats unavailable: %s", e)
+
     return {
         "realm": "Kaelthas",
         "expansion": "Wrath of the Lich King 3.3.5a",
-        "database": "connected" if accounts else "demo",
+        "database": "connected" if (acore_db.enabled() or accounts) else "demo",
         "registeredAccounts": accounts or 9585,
         "createdCharacters": characters or 20030,
         "playersOnline": online or 482,

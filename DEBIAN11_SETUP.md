@@ -314,3 +314,194 @@ curl -I https://kaelthas.example.com/
 ```
 
 Fertig — die Kaelthas-Homepage läuft auf `https://kaelthas.example.com`.
+
+---
+
+## 16. AzerothCore (WotLK 3.3.5a) komplett aufsetzen — Docker
+
+Wir nehmen den offiziellen Docker-Compose-Stack vom AzerothCore-Projekt
+(https://github.com/azerothcore/azerothcore-wotlk). Damit hast du in unter
+einer Stunde einen lauffähigen WoW-Server.
+
+### 16.1 Docker & Docker-Compose installieren
+
+```bash
+sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | \
+  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/debian bullseye stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER
+newgrp docker
+docker --version
+docker compose version
+```
+
+### 16.2 AzerothCore klonen & bauen
+
+```bash
+cd /opt
+sudo git clone https://github.com/azerothcore/azerothcore-wotlk.git --branch master --single-branch
+sudo chown -R $USER:$USER azerothcore-wotlk
+cd azerothcore-wotlk
+
+# Daten-Verzeichnisse anlegen
+mkdir -p env/dist/data env/dist/logs env/dist/etc
+
+# Docker-Images bauen (dauert ~30-60 min, ~6-8 GB RAM empfohlen)
+docker compose --profile app pull
+docker compose --profile app build
+
+# Datenbanken initialisieren
+docker compose --profile db up -d ac-database
+sleep 15
+docker compose run --rm ac-db-import
+
+# Client-Daten (dbc, maps, vmaps, mmaps) downloaden — ~6 GB
+docker compose run --rm ac-tools
+
+# Server starten
+docker compose --profile app up -d
+```
+
+Logs ansehen:
+```bash
+docker compose logs -f ac-worldserver
+docker compose logs -f ac-authserver
+```
+
+### 16.3 GM-Account anlegen
+
+```bash
+docker compose exec ac-worldserver bash -c "echo 'account create admin admin123' > /tmp/cmd"
+docker compose exec ac-worldserver ./worldserver -c "/tmp/cmd"
+# oder direkt in die laufende worldserver-Konsole:
+docker attach azerothcore-wotlk-ac-worldserver-1
+> account create admin admin123
+> account set gmlevel admin 3 -1
+> .quit
+# (Ctrl+P, Ctrl+Q zum Detachen ohne zu stoppen)
+```
+
+### 16.4 Realm in der Auth-DB konfigurieren
+
+```bash
+docker compose exec ac-database mysql -uroot -ppassword -e \
+  "UPDATE acore_auth.realmlist SET address='DEINE_SERVER_IP', port=8085 WHERE id=1;"
+```
+
+Wenn deine Spieler über Internet verbinden, muss `address` die öffentliche IP
+oder DNS-Name deines Servers sein.
+
+### 16.5 Ports öffnen
+
+```bash
+sudo ufw allow 3724/tcp comment 'AzerothCore Auth'
+sudo ufw allow 8085/tcp comment 'AzerothCore World'
+sudo ufw reload
+```
+
+### 16.6 Kaelthas-Webseite mit AzerothCore verbinden
+
+Der Docker-Stack exposed MySQL auf Port 3306 (siehe `docker-compose.yml`). Lege
+in der Auth-DB einen Read/Write-User für die Webseite an:
+
+```bash
+docker compose exec ac-database mysql -uroot -ppassword <<'SQL'
+CREATE USER 'webapp'@'%' IDENTIFIED BY 'EinSicheresPasswort';
+GRANT SELECT, INSERT, UPDATE, DELETE ON acore_auth.account TO 'webapp'@'%';
+GRANT SELECT ON acore_characters.* TO 'webapp'@'%';
+FLUSH PRIVILEGES;
+SQL
+```
+
+In `/var/www/kaelthas/backend/.env` aktivieren:
+
+```ini
+AC_AUTH_HOST=127.0.0.1
+AC_AUTH_PORT=3306
+AC_AUTH_DB=acore_auth
+AC_CHARS_DB=acore_characters
+AC_DB_USER=webapp
+AC_DB_PASS=EinSicheresPasswort
+```
+
+Backend neustarten:
+```bash
+sudo systemctl restart kaelthas-backend
+```
+
+Jetzt:
+- `/api/register` → schreibt direkt in `acore_auth.account` mit echtem SRP6-Hash → Spieler kann sich sofort im Game einloggen
+- `/api/login` → verifiziert gegen SRP6-Salt/Verifier in `acore_auth.account`
+- `/api/account/password` → updated Salt+Verifier in `acore_auth.account`
+- `/api/characters` → liest live aus `acore_characters.characters`
+- `/api/status` → echte `accounts`, `online`, `characters` Counts
+
+### 16.7 WoW-Client verbinden
+
+1. Spieler braucht den **3.3.5a (build 12340)** WoW-Client (legaler Besitz vorausgesetzt)
+2. Datei `WoW/Data/enUS/realmlist.wtf` (oder deUS/deDE) öffnen
+3. Inhalt ersetzen mit:
+   ```
+   set realmlist DEINE_SERVER_IP_ODER_DOMAIN
+   ```
+4. WoW starten → mit dem auf der Webseite registrierten Account einloggen
+
+### 16.8 AzerothCore-Stack verwalten
+
+```bash
+# Status
+docker compose ps
+
+# Stoppen
+docker compose --profile app down
+
+# Updaten
+cd /opt/azerothcore-wotlk
+git pull
+docker compose --profile app pull
+docker compose --profile app build
+docker compose run --rm ac-db-import
+docker compose --profile app up -d
+
+# Backup
+docker compose exec ac-database mysqldump -uroot -ppassword \
+  --all-databases > /backup/acore-$(date +%F).sql
+```
+
+### 16.9 Troubleshooting AzerothCore
+
+| Problem | Lösung |
+|---|---|
+| `worldserver` startet nicht | `docker compose logs ac-worldserver` — meist fehlen Client-Daten (`ac-tools` erneut laufen lassen) |
+| Spieler kann sich nicht einloggen | Realmlist `address` muss von außen erreichbar sein, Ports 3724 + 8085 offen |
+| `wrong account name or password` | Username muss in **GROSSBUCHSTABEN** in `acore_auth.account` stehen (macht die Webseite automatisch) |
+| Charakter erstellen schlägt fehl | `realmlist.realmflags` darf nicht 0x1 sein → `UPDATE realmlist SET realmflags=0 WHERE id=1;` |
+| MySQL Port 3306 belegt | In `docker-compose.yml` MySQL-Port mappen z.B. `3307:3306`, dann in `backend/.env` `AC_AUTH_PORT=3307` |
+
+---
+
+## 17. Komplettübersicht der laufenden Dienste
+
+Nach Abschluss aller Schritte hast du folgende Dienste laufen:
+
+| Dienst | Port | Verwaltet von |
+|---|---|---|
+| Nginx (Web) | 80, 443 | systemd |
+| Kaelthas FastAPI | 8001 (intern) | systemd |
+| MongoDB (Forum, Sessions) | 27017 (intern) | systemd |
+| AzerothCore Auth | 3724 | Docker |
+| AzerothCore World | 8085 | Docker |
+| AzerothCore MySQL | 3306 (intern) | Docker |
+
+Spieler verbinden über Port **3724/8085**, Webseiten-Besucher über **80/443**.
+Die Webseite synchronisiert Account-Erstellung & Passwort-Änderungen automatisch
+in die AzerothCore-Datenbank.
+
+Viel Erfolg mit Kaelthas! ⚔️

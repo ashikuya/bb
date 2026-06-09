@@ -128,6 +128,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "POST /api/register creates account, returns account object, sets kael_sid httpOnly cookie. Validation working (username format, password length). Test passed."
+      - working: true
+        agent: "testing"
+        comment: "Re-tested after AC integration code added. AC_AUTH_HOST not set - MongoDB fallback active. Registration working correctly with user 'smoketest2'. Password validation enforcing 4-16 chars (rejected 'abc' and 20-char password with 400). Account ID auto-incremented via MongoDB counter. Test passed."
 
   - task: "User authentication (me endpoint)"
     implemented: true
@@ -176,6 +179,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "POST /api/account/password changes user password, returns {ok: true}. Requires authentication. Test passed."
+      - working: true
+        agent: "testing"
+        comment: "Re-tested after AC integration. Changed password from 'Test1234' to 'NewPass1', then verified by logging out and logging back in with new password - SUCCESS. MongoDB passwordHash updated correctly. Password validation enforcing 4-16 chars. Test passed."
 
   - task: "Forum categories"
     implemented: true
@@ -277,12 +283,12 @@ frontend:
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "All backend endpoints tested and working"
+    - "AzerothCore integration MongoDB fallback verified - all endpoints working"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -290,3 +296,5 @@ test_plan:
 agent_communication:
   - agent: "testing"
     message: "Completed comprehensive backend API testing. All 15 tests passed (12 main flow + 3 error cases). Backend is fully functional. Test file: /app/backend_test.py. Public URL tested: https://images-81.preview.emergentagent.com/api. Session management with kael_sid cookie working correctly. All endpoints returning expected responses. No critical issues found."
+  - agent: "testing"
+    message: "Re-tested after AzerothCore integration code added. AC integration DISABLED (no AC_AUTH_HOST in .env) - MongoDB fallback tested. Smoke test with user 'smoketest2': ALL 10 TESTS PASSED (100%). Verified: register→/me→password change→logout→login with new password→characters (2 demo)→status→forum thread creation→password validation (4-16 chars enforced). MongoDB fallback working perfectly. Test file: /app/smoke_test_ac_fallback.py. No critical issues found."
