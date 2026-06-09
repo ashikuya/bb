@@ -1,66 +1,99 @@
-"""Kaelthas account & forum service - FastAPI port of kaelthas-service."""
+"""Kaelthas backend — pure MySQL (uses AzerothCore acore_auth + kaelthas_web)."""
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
-from passlib.hash import bcrypt
 from pathlib import Path
-from datetime import datetime, timezone
-from typing import Optional, List
-import os, uuid, re, logging, secrets
+from typing import Optional, AsyncIterator
+import os, uuid, re, logging, secrets, aiomysql
 
 import srp6
-import acore_db
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
-
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+load_dotenv(ROOT_DIR / ".env")
 
 app = FastAPI(title="Kaelthas Service")
 api = APIRouter(prefix="/api")
-
-logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("kaelthas")
+logging.basicConfig(level=logging.INFO)
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
 SESSION_COOKIE = "kael_sid"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+MYSQL_HOST = os.environ.get("MYSQL_HOST", "127.0.0.1")
+MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
+MYSQL_USER = os.environ.get("MYSQL_USER", "webapp")
+MYSQL_PASS = os.environ.get("MYSQL_PASS", "")
+WEB_DB     = os.environ.get("WEB_DB",   "kaelthas_web")
+AUTH_DB    = os.environ.get("AUTH_DB",  "acore_auth")
+CHARS_DB   = os.environ.get("CHARS_DB", "acore_characters")
 
-def serialize_account(acc: dict) -> dict:
+_pool: Optional[aiomysql.Pool] = None
+
+async def get_pool() -> aiomysql.Pool:
+    global _pool
+    if _pool is None:
+        _pool = await aiomysql.create_pool(
+            host=MYSQL_HOST, port=MYSQL_PORT,
+            user=MYSQL_USER, password=MYSQL_PASS,
+            db=WEB_DB, minsize=1, maxsize=10,
+            autocommit=True, charset="utf8mb4",
+        )
+    return _pool
+
+async def query_one(sql: str, args: tuple = (), db: Optional[str] = None) -> Optional[dict]:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        if db: await conn.select_db(db)
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(sql, args)
+            return await cur.fetchone()
+
+async def query_all(sql: str, args: tuple = (), db: Optional[str] = None) -> list[dict]:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        if db: await conn.select_db(db)
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(sql, args)
+            return list(await cur.fetchall())
+
+async def exec_sql(sql: str, args: tuple = (), db: Optional[str] = None) -> int:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        if db: await conn.select_db(db)
+        async with conn.cursor() as cur:
+            await cur.execute(sql, args)
+            return cur.lastrowid
+
+# ── Auth helpers ────────────────────────────────────────────────────────────
+def serialize(acc: dict) -> dict:
     return {
         "id": acc["id"],
-        "username": acc["username"],
-        "email": acc["email"],
-        "joinDate": acc.get("joinDate"),
-        "lastLogin": acc.get("lastLogin"),
-        "online": False,
+        "username": acc["username"].lower() if isinstance(acc["username"], str) else acc["username"],
+        "email": acc.get("email") or "",
+        "joinDate": str(acc.get("joindate")) if acc.get("joindate") else None,
+        "lastLogin": str(acc.get("last_login")) if acc.get("last_login") else None,
+        "online": bool(acc.get("online", 0)),
         "expansion": 2,
     }
 
 async def get_session_account(request: Request) -> Optional[dict]:
     sid = request.cookies.get(SESSION_COOKIE)
-    if not sid:
-        return None
-    session = await db.sessions.find_one({"_id": sid})
-    if not session:
-        return None
-    acc = await db.accounts.find_one({"id": session["accountId"]})
-    return acc
+    if not sid: return None
+    sess = await query_one("SELECT account_id FROM sessions WHERE id=%s", (sid,))
+    if not sess: return None
+    return await query_one(
+        "SELECT id, username, email, joindate, last_login, online "
+        "FROM account WHERE id=%s", (sess["account_id"],), db=AUTH_DB,
+    )
 
 async def require_account(request: Request) -> dict:
     acc = await get_session_account(request)
     if not acc:
-        raise HTTPException(status_code=401, detail={"error": "Not authenticated."})
+        raise HTTPException(401, detail={"error": "Not authenticated."})
     return acc
 
-# ── Models ───────────────────────────────────────────────────────────────────
+# ── Models ──────────────────────────────────────────────────────────────────
 class RegisterIn(BaseModel):
     username: str
     email: EmailStr
@@ -80,7 +113,7 @@ class ThreadIn(BaseModel):
 class PostIn(BaseModel):
     content: str = Field(min_length=1)
 
-# ── Auth ─────────────────────────────────────────────────────────────────────
+# ── Auth ────────────────────────────────────────────────────────────────────
 @api.post("/register")
 async def register(body: RegisterIn, response: Response):
     if not USERNAME_RE.match(body.username):
@@ -88,270 +121,263 @@ async def register(body: RegisterIn, response: Response):
     if len(body.password) < 4 or len(body.password) > 16:
         raise HTTPException(400, detail={"error": "Password must be 4-16 characters."})
 
-    uname = body.username.lower()
-    if await db.accounts.find_one({"username": uname}):
+    uname = body.username.upper()
+    existing = await query_one("SELECT id FROM account WHERE username=%s", (uname,), db=AUTH_DB)
+    if existing:
         raise HTTPException(400, detail={"error": "Username already taken."})
-    if await db.accounts.find_one({"email": body.email.lower()}):
-        raise HTTPException(400, detail={"error": "Email already registered."})
 
-    ac_id = None
-    if acore_db.enabled():
-        existing = await acore_db.find_account(uname)
-        if existing:
-            raise HTTPException(400, detail={"error": "Username already taken in game."})
-        salt, verifier = srp6.build(uname, body.password)
-        ac_id = await acore_db.create_account(uname, body.email.lower(), salt, verifier)
-        acc_id = int(ac_id)
-    else:
-        counter = await db.counters.find_one_and_update(
-            {"_id": "accountId"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True,
-        )
-        acc_id = counter["seq"]
-
-    acc = {
-        "id": acc_id,
-        "username": uname,
-        "email": body.email.lower(),
-        "passwordHash": bcrypt.hash(body.password),  # for web-login fallback
-        "joinDate": now_iso(),
-        "lastLogin": None,
-    }
-    await db.accounts.insert_one(acc)
+    email_lc = body.email.lower()
+    salt, verifier = srp6.build(uname, body.password)
+    acc_id = await exec_sql(
+        "INSERT INTO account (username, salt, verifier, email, reg_mail, expansion, joindate) "
+        "VALUES (%s, %s, %s, %s, %s, 2, NOW())",
+        (uname, salt, verifier, email_lc, email_lc), db=AUTH_DB,
+    )
 
     sid = secrets.token_urlsafe(32)
-    await db.sessions.insert_one({"_id": sid, "accountId": acc_id, "createdAt": now_iso()})
+    await exec_sql("INSERT INTO sessions (id, account_id) VALUES (%s, %s)", (sid, acc_id))
     response.set_cookie(SESSION_COOKIE, sid, httponly=True, samesite="lax", max_age=60*60*24*30)
-    return {"account": serialize_account(acc)}
+
+    acc = await query_one(
+        "SELECT id, username, email, joindate, last_login, online FROM account WHERE id=%s",
+        (acc_id,), db=AUTH_DB,
+    )
+    return {"account": serialize(acc)}
 
 @api.post("/login")
 async def login(body: LoginIn, response: Response):
-    uname = body.username.lower()
-    acc = await db.accounts.find_one({"username": uname})
-
-    # Verify against AzerothCore if enabled, otherwise bcrypt
-    ok = False
-    if acore_db.enabled():
-        ac_acc = await acore_db.find_account(uname)
-        if ac_acc and srp6.verify_password(uname, body.password, ac_acc["salt"], ac_acc["verifier"]):
-            ok = True
-            if not acc:
-                # AC account exists but no web profile yet → create one
-                acc = {
-                    "id": ac_acc["id"], "username": uname,
-                    "email": ac_acc.get("email") or "",
-                    "passwordHash": bcrypt.hash(body.password),
-                    "joinDate": str(ac_acc.get("joindate") or now_iso()),
-                    "lastLogin": None,
-                }
-                await db.accounts.insert_one(acc)
-    elif acc and bcrypt.verify(body.password, acc["passwordHash"]):
-        ok = True
-
-    if not ok or not acc:
+    uname = body.username.upper()
+    acc = await query_one(
+        "SELECT id, username, email, salt, verifier, joindate, last_login, online "
+        "FROM account WHERE username=%s", (uname,), db=AUTH_DB,
+    )
+    if not acc or not srp6.verify_password(uname, body.password, acc["salt"], acc["verifier"]):
         raise HTTPException(401, detail={"error": "Invalid credentials."})
 
-    await db.accounts.update_one({"id": acc["id"]}, {"$set": {"lastLogin": now_iso()}})
-    if acore_db.enabled():
-        try: await acore_db.touch_login(acc["id"])
-        except Exception as e: log.warning("touch_login failed: %s", e)
+    await exec_sql("UPDATE account SET last_login=NOW() WHERE id=%s", (acc["id"],), db=AUTH_DB)
 
     sid = secrets.token_urlsafe(32)
-    await db.sessions.insert_one({"_id": sid, "accountId": acc["id"], "createdAt": now_iso()})
+    await exec_sql("INSERT INTO sessions (id, account_id) VALUES (%s, %s)", (sid, acc["id"]))
     response.set_cookie(SESSION_COOKIE, sid, httponly=True, samesite="lax", max_age=60*60*24*30)
-    acc["lastLogin"] = now_iso()
-    return {"account": serialize_account(acc)}
+    return {"account": serialize(acc)}
 
 @api.post("/logout")
 async def logout(request: Request, response: Response):
     sid = request.cookies.get(SESSION_COOKIE)
     if sid:
-        await db.sessions.delete_one({"_id": sid})
+        await exec_sql("DELETE FROM sessions WHERE id=%s", (sid,))
     response.delete_cookie(SESSION_COOKIE)
     return {"ok": True}
 
 @api.get("/me")
 async def me(acc: dict = Depends(require_account)):
-    return {"account": serialize_account(acc)}
+    return {"account": serialize(acc)}
 
 @api.post("/account/password")
 async def change_pw(body: PwChange, acc: dict = Depends(require_account)):
     if len(body.newPassword) < 4 or len(body.newPassword) > 16:
         raise HTTPException(400, detail={"error": "Password must be 4-16 characters."})
-    await db.accounts.update_one(
-        {"id": acc["id"]}, {"$set": {"passwordHash": bcrypt.hash(body.newPassword)}}
+    salt, verifier = srp6.build(acc["username"], body.newPassword)
+    await exec_sql(
+        "UPDATE account SET salt=%s, verifier=%s WHERE id=%s",
+        (salt, verifier, acc["id"]), db=AUTH_DB,
     )
-    if acore_db.enabled():
-        salt, verifier = srp6.build(acc["username"], body.newPassword)
-        try: await acore_db.update_password(acc["id"], salt, verifier)
-        except Exception as e: log.warning("AC password update failed: %s", e)
     return {"ok": True}
 
-# ── Characters ──────────────────────────────────────────────────────────────
+# ── Characters (read live from acore_characters) ────────────────────────────
 @api.get("/characters")
 async def characters(acc: dict = Depends(require_account)):
-    if acore_db.enabled():
-        try:
-            chars = await acore_db.list_characters(acc["id"])
-            return {"characters": chars}
-        except Exception as e:
-            log.warning("AC characters fetch failed: %s", e)
+    try:
+        rows = await query_all(
+            "SELECT guid, name, level, race, class, gender, money, online, totaltime "
+            "FROM characters WHERE account=%s ORDER BY level DESC, name ASC LIMIT 50",
+            (acc["id"],), db=CHARS_DB,
+        )
+        chars = [{
+            "guid": r["guid"], "name": r["name"], "level": r["level"],
+            "race": r["race"], "class": r["class"], "gender": r["gender"],
+            "money": r["money"], "online": bool(r["online"]),
+            "totalPlaytime": r["totaltime"],
+        } for r in rows]
+        return {"characters": chars}
+    except Exception as e:
+        log.warning("Characters fetch failed: %s", e)
+        return {"characters": []}
 
-    chars = await db.characters.find({"accountId": acc["id"]}).to_list(50)
-    if not chars:
-        demo = [
-            {"guid": acc["id"] * 100 + 1, "accountId": acc["id"], "name": acc["username"].title(),
-             "level": 80, "race": 10, "class": 9, "gender": 0, "money": 1234567,
-             "online": False, "totalPlaytime": 360000},
-            {"guid": acc["id"] * 100 + 2, "accountId": acc["id"], "name": f"{acc['username'].title()}alt",
-             "level": 42, "race": 1, "class": 1, "gender": 1, "money": 89012,
-             "online": False, "totalPlaytime": 75000},
-        ]
-        await db.characters.insert_many([dict(d) for d in demo])
-        chars = demo
-    return {"characters": [{k: v for k, v in c.items() if k != "_id"} for c in chars]}
-
-# ── Status / Live Stats ─────────────────────────────────────────────────────
+# ── Status ──────────────────────────────────────────────────────────────────
 @api.get("/status")
 async def status():
-    web_accounts = await db.accounts.count_documents({})
-    web_characters = await db.characters.count_documents({})
+    try:
+        a = await query_one("SELECT COUNT(*) AS c FROM account", db=AUTH_DB) or {"c": 0}
+        o = await query_one("SELECT COUNT(*) AS c FROM account WHERE online=1", db=AUTH_DB) or {"c": 0}
+        c = await query_one("SELECT COUNT(*) AS c FROM characters", db=CHARS_DB) or {"c": 0}
+        return {
+            "realm": "Kaelthas",
+            "expansion": "Wrath of the Lich King 3.3.5a",
+            "database": "connected",
+            "registeredAccounts": a["c"],
+            "createdCharacters": c["c"],
+            "playersOnline": o["c"],
+        }
+    except Exception as e:
+        log.warning("Status query failed: %s", e)
+        return {
+            "realm": "Kaelthas",
+            "expansion": "Wrath of the Lich King 3.3.5a",
+            "database": "demo",
+            "registeredAccounts": 9585,
+            "createdCharacters": 20030,
+            "playersOnline": 482,
+        }
 
-    accounts = web_accounts
-    characters = web_characters
-    online = 0
-
-    if acore_db.enabled():
-        try:
-            s = await acore_db.stats()
-            accounts = s["accounts"]
-            characters = s["characters"]
-            online = s["online"]
-        except Exception as e:
-            log.warning("AzerothCore stats unavailable: %s", e)
-
+# ── Forum ───────────────────────────────────────────────────────────────────
+async def _cat_stats(slug: str) -> dict:
+    t = await query_one("SELECT COUNT(*) c FROM forum_threads WHERE category_slug=%s", (slug,))
+    p = await query_one("SELECT COUNT(*) c FROM forum_posts WHERE category_slug=%s", (slug,))
+    latest = await query_one(
+        "SELECT title, updated_at FROM forum_threads WHERE category_slug=%s "
+        "ORDER BY updated_at DESC LIMIT 1", (slug,),
+    )
     return {
-        "realm": "Kaelthas",
-        "expansion": "Wrath of the Lich King 3.3.5a",
-        "database": "connected" if (acore_db.enabled() or accounts) else "demo",
-        "registeredAccounts": accounts or 9585,
-        "createdCharacters": characters or 20030,
-        "playersOnline": online or 482,
+        "threadCount": (t or {}).get("c", 0),
+        "postCount": (p or {}).get("c", 0),
+        "latestThread": latest["title"] if latest else None,
+        "latestAt": str(latest["updated_at"]) if latest else None,
     }
 
-# ── Forum ────────────────────────────────────────────────────────────────────
-DEFAULT_CATEGORIES = [
-    {"slug": "announcements", "name": "Announcements", "description": "Official news and patch notes.", "icon": "⚑", "order": 1},
-    {"slug": "general",       "name": "General Discussion", "description": "Talk about anything Kaelthas-related.", "icon": "✦", "order": 2},
-    {"slug": "guides",        "name": "Guides & Strategy", "description": "Class guides, raid strategies, professions.", "icon": "✎", "order": 3},
-    {"slug": "guilds",        "name": "Guild Recruitment", "description": "Find a guild or recruit members.", "icon": "⚔", "order": 4},
-    {"slug": "support",       "name": "Help & Support", "description": "Connection issues, bug reports, questions.", "icon": "?", "order": 5},
-]
-
-async def ensure_categories():
-    if await db.forum_categories.count_documents({}) == 0:
-        await db.forum_categories.insert_many([{**c, "_id": c["slug"]} for c in DEFAULT_CATEGORIES])
-
-@app.on_event("startup")
-async def startup():
-    await ensure_categories()
-
-async def _category_stats(slug: str) -> dict:
-    threads = await db.forum_threads.count_documents({"categorySlug": slug})
-    posts = await db.forum_posts.count_documents({"categorySlug": slug})
-    latest = await db.forum_threads.find_one({"categorySlug": slug}, sort=[("updatedAt", -1)])
+def _cat_to_api(c: dict, stats: dict) -> dict:
     return {
-        "threadCount": threads, "postCount": posts,
-        "latestThread": latest["title"] if latest else None,
-        "latestAt": latest["updatedAt"] if latest else None,
+        "_id": c["slug"], "slug": c["slug"], "name": c["name"],
+        "description": c["description"], "icon": c["icon"], "order": c["sort_order"],
+        **stats,
+    }
+
+def _thread_to_api(t: dict) -> dict:
+    return {
+        "_id": t["id"], "categorySlug": t["category_slug"], "title": t["title"],
+        "authorId": t["author_id"], "authorName": t["author_name"],
+        "createdAt": str(t["created_at"]), "updatedAt": str(t["updated_at"]),
+        "views": t["views"], "pinned": bool(t["pinned"]), "locked": bool(t["locked"]),
+        "replyCount": t["reply_count"],
+        "lastReplyAt": str(t["last_reply_at"]),
+        "lastReplyAuthor": t["last_reply_by"],
+    }
+
+def _post_to_api(p: dict) -> dict:
+    return {
+        "_id": p["id"], "threadId": p["thread_id"],
+        "authorId": p["author_id"], "authorName": p["author_name"],
+        "authorRole": p["author_role"], "authorPostCount": 1,
+        "content": p["content"], "createdAt": str(p["created_at"]),
+        "updatedAt": str(p["created_at"]), "edited": bool(p["edited"]),
     }
 
 @api.get("/forum/categories")
 async def list_categories():
-    cats = await db.forum_categories.find().sort("order", 1).to_list(50)
+    cats = await query_all("SELECT * FROM forum_categories ORDER BY sort_order")
     out = []
     for c in cats:
-        stats = await _category_stats(c["slug"])
-        out.append({**{k: v for k, v in c.items() if k != "_id"}, "_id": c["slug"], **stats})
+        out.append(_cat_to_api(c, await _cat_stats(c["slug"])))
     return {"categories": out}
 
 @api.get("/forum/categories/{slug}/threads")
 async def list_threads(slug: str, page: int = 1):
-    cat = await db.forum_categories.find_one({"slug": slug})
+    cat = await query_one("SELECT * FROM forum_categories WHERE slug=%s", (slug,))
     if not cat:
         raise HTTPException(404, detail={"error": "Category not found."})
-    page = max(page, 1); per = 20
-    total = await db.forum_threads.count_documents({"categorySlug": slug})
-    threads = await db.forum_threads.find({"categorySlug": slug}) \
-        .sort([("pinned", -1), ("updatedAt", -1)]).skip((page-1)*per).limit(per).to_list(per)
-    stats = await _category_stats(slug)
+    per = 20; page = max(page, 1)
+    total = (await query_one(
+        "SELECT COUNT(*) c FROM forum_threads WHERE category_slug=%s", (slug,)
+    ))["c"]
+    threads = await query_all(
+        "SELECT * FROM forum_threads WHERE category_slug=%s "
+        "ORDER BY pinned DESC, updated_at DESC LIMIT %s OFFSET %s",
+        (slug, per, (page - 1) * per),
+    )
     return {
-        "category": {**{k: v for k, v in cat.items() if k != "_id"}, "_id": slug, **stats},
-        "threads": [{k: v for k, v in t.items() if k != "_id_raw"} for t in threads],
+        "category": _cat_to_api(cat, await _cat_stats(slug)),
+        "threads": [_thread_to_api(t) for t in threads],
         "total": total, "pages": (total + per - 1) // per or 1,
     }
 
 @api.post("/forum/categories/{slug}/threads")
 async def create_thread(slug: str, body: ThreadIn, acc: dict = Depends(require_account)):
-    cat = await db.forum_categories.find_one({"slug": slug})
+    cat = await query_one("SELECT slug FROM forum_categories WHERE slug=%s", (slug,))
     if not cat:
         raise HTTPException(404, detail={"error": "Category not found."})
-    tid = str(uuid.uuid4())
-    now = now_iso()
-    thread = {
-        "_id": tid, "categorySlug": slug, "title": body.title,
-        "authorId": acc["id"], "authorName": acc["username"],
-        "createdAt": now, "updatedAt": now, "views": 0,
-        "pinned": False, "locked": False, "replyCount": 0,
-        "lastReplyAt": now, "lastReplyAuthor": acc["username"],
-    }
-    post = {
-        "_id": str(uuid.uuid4()), "threadId": tid, "categorySlug": slug,
-        "authorId": acc["id"], "authorName": acc["username"], "authorRole": "player",
-        "authorPostCount": 1, "content": body.content,
-        "createdAt": now, "updatedAt": now, "edited": False,
-    }
-    await db.forum_threads.insert_one(thread)
-    await db.forum_posts.insert_one(post)
-    return {"thread": thread, "post": post}
+    tid, pid = str(uuid.uuid4()), str(uuid.uuid4())
+    uname = acc["username"].lower()
+    await exec_sql(
+        "INSERT INTO forum_threads (id, category_slug, title, author_id, author_name, "
+        "reply_count, last_reply_by) VALUES (%s, %s, %s, %s, %s, 0, %s)",
+        (tid, slug, body.title, acc["id"], uname, uname),
+    )
+    await exec_sql(
+        "INSERT INTO forum_posts (id, thread_id, category_slug, author_id, author_name, content) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        (pid, tid, slug, acc["id"], uname, body.content),
+    )
+    t = await query_one("SELECT * FROM forum_threads WHERE id=%s", (tid,))
+    p = await query_one("SELECT * FROM forum_posts WHERE id=%s", (pid,))
+    return {"thread": _thread_to_api(t), "post": _post_to_api(p)}
 
 @api.get("/forum/threads/{thread_id}")
 async def get_thread(thread_id: str, page: int = 1):
-    t = await db.forum_threads.find_one({"_id": thread_id})
+    t = await query_one("SELECT * FROM forum_threads WHERE id=%s", (thread_id,))
     if not t:
         raise HTTPException(404, detail={"error": "Thread not found."})
-    await db.forum_threads.update_one({"_id": thread_id}, {"$inc": {"views": 1}})
+    await exec_sql("UPDATE forum_threads SET views=views+1 WHERE id=%s", (thread_id,))
     per = 20; page = max(page, 1)
-    total = await db.forum_posts.count_documents({"threadId": thread_id})
-    posts = await db.forum_posts.find({"threadId": thread_id}) \
-        .sort("createdAt", 1).skip((page-1)*per).limit(per).to_list(per)
+    total = (await query_one(
+        "SELECT COUNT(*) c FROM forum_posts WHERE thread_id=%s", (thread_id,)
+    ))["c"]
+    posts = await query_all(
+        "SELECT * FROM forum_posts WHERE thread_id=%s ORDER BY created_at ASC LIMIT %s OFFSET %s",
+        (thread_id, per, (page - 1) * per),
+    )
     return {
-        "thread": t, "posts": posts,
+        "thread": _thread_to_api(t),
+        "posts": [_post_to_api(p) for p in posts],
         "total": total, "pages": (total + per - 1) // per or 1,
     }
 
 @api.post("/forum/threads/{thread_id}/posts")
 async def reply(thread_id: str, body: PostIn, acc: dict = Depends(require_account)):
-    t = await db.forum_threads.find_one({"_id": thread_id})
+    t = await query_one("SELECT id, locked, category_slug FROM forum_threads WHERE id=%s", (thread_id,))
     if not t:
         raise HTTPException(404, detail={"error": "Thread not found."})
-    if t.get("locked"):
+    if t["locked"]:
         raise HTTPException(403, detail={"error": "Thread is locked."})
-    now = now_iso()
-    post = {
-        "_id": str(uuid.uuid4()), "threadId": thread_id, "categorySlug": t["categorySlug"],
-        "authorId": acc["id"], "authorName": acc["username"], "authorRole": "player",
-        "authorPostCount": 1, "content": body.content,
-        "createdAt": now, "updatedAt": now, "edited": False,
-    }
-    await db.forum_posts.insert_one(post)
-    await db.forum_threads.update_one(
-        {"_id": thread_id},
-        {"$inc": {"replyCount": 1},
-         "$set": {"updatedAt": now, "lastReplyAt": now, "lastReplyAuthor": acc["username"]}},
+    pid = str(uuid.uuid4())
+    uname = acc["username"].lower()
+    await exec_sql(
+        "INSERT INTO forum_posts (id, thread_id, category_slug, author_id, author_name, content) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        (pid, thread_id, t["category_slug"], acc["id"], uname, body.content),
     )
-    return {"post": post}
+    await exec_sql(
+        "UPDATE forum_threads SET reply_count=reply_count+1, last_reply_at=NOW(), last_reply_by=%s "
+        "WHERE id=%s", (uname, thread_id),
+    )
+    p = await query_one("SELECT * FROM forum_posts WHERE id=%s", (pid,))
+    return {"post": _post_to_api(p)}
 
-# ── Wire up ─────────────────────────────────────────────────────────────────
+# ── Lifecycle ───────────────────────────────────────────────────────────────
+@app.on_event("startup")
+async def startup():
+    try:
+        await get_pool()
+        log.info("MySQL pool ready: %s@%s/%s", MYSQL_USER, MYSQL_HOST, WEB_DB)
+    except Exception as e:
+        log.warning("MySQL not reachable on startup: %s (will retry on first request)", e)
+
+@app.on_event("shutdown")
+async def shutdown():
+    global _pool
+    if _pool:
+        _pool.close()
+        await _pool.wait_closed()
+
 app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
@@ -359,7 +385,3 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
-
-@app.on_event("shutdown")
-async def shutdown():
-    client.close()
