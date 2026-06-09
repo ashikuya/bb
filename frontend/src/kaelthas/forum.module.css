@@ -1,0 +1,89 @@
+/* Forum styles */
+.wrap {
+  position: relative;
+  z-index: 2;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 7rem 1.5rem 4rem;
+}
+.backLink {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  color: var(--kael-frost); font-size: 0.8rem;
+  text-decoration: none; margin-bottom: 1.2rem; opacity: 0.8;
+  transition: opacity 0.18s, color 0.18s;
+}
+.backLink:hover { opacity: 1; color: var(--kael-frost-bright); }
+.pageTitle {
+  font-family: var(--kael-font-display);
+  font-weight: 800; font-size: 2.4rem; color: var(--kael-frost-bright);
+  margin: 0 0 0.4rem; text-shadow: 0 0 20px rgba(78,165,211,.4);
+}
+.pageSub { color: var(--kael-text-dim); font-size: 0.95rem; margin-bottom: 2rem; }
+.headerRow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+.actionBtn {
+  padding: 0.7rem 1.4rem; border: 1px solid var(--kael-frost);
+  background: linear-gradient(180deg, rgba(46,110,150,.55), rgba(18,48,74,.85));
+  color: var(--kael-frost-bright); border-radius: 6px; cursor: pointer;
+  font-family: var(--kael-font-display); letter-spacing: 0.12em;
+  text-transform: uppercase; font-size: 0.78rem; transition: all 0.2s;
+}
+.actionBtn:hover { box-shadow: var(--kael-shadow-glow); color: #fff; }
+.actionBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.empty {
+  padding: 2rem; text-align: center; color: var(--kael-text-dim);
+  background: var(--kael-panel); border: 1px solid var(--kael-panel-border);
+  border-radius: 8px;
+}
+.catList, .threadList, .postList { display: flex; flex-direction: column; gap: 0.9rem; }
+.catCard, .threadRow {
+  display: flex; align-items: center; gap: 1.2rem;
+  background: var(--kael-panel); border: 1px solid var(--kael-panel-border);
+  border-radius: 8px; padding: 1.1rem 1.3rem; text-decoration: none;
+  color: var(--kael-text); transition: all 0.2s ease;
+}
+.catCard:hover, .threadRow:hover {
+  border-color: var(--kael-frost); box-shadow: var(--kael-shadow-glow); transform: translateY(-2px);
+}
+.catIcon { font-size: 1.8rem; color: var(--kael-frost); width: 48px; text-align: center; }
+.catBody { flex: 1; }
+.catName { font-family: var(--kael-font-display); font-size: 1.15rem; color: var(--kael-frost-bright); margin: 0 0 0.25rem; }
+.catDesc { font-size: 0.85rem; color: var(--kael-text-dim); margin: 0; }
+.catStats, .threadStats { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; color: var(--kael-text-dim); text-align: right; }
+.catStats strong, .threadStats strong { color: var(--kael-frost-bright); }
+.threadMain { flex: 1; }
+.threadTitle { font-family: var(--kael-font-display); font-size: 1.05rem; color: var(--kael-frost-bright); margin: 0 0 0.2rem; }
+.threadMeta { font-size: 0.78rem; color: var(--kael-text-dim); margin: 0; }
+.pin { color: var(--kael-gold); margin-right: 0.3rem; }
+.newForm {
+  background: var(--kael-panel); border: 1px solid var(--kael-panel-border);
+  border-radius: 8px; padding: 1.2rem; margin-bottom: 1.5rem;
+  display: flex; flex-direction: column; gap: 0.8rem;
+}
+.input, .textarea {
+  width: 100%; padding: 0.7rem 0.9rem;
+  background: rgba(5,9,16,.7); border: 1px solid var(--kael-panel-border);
+  border-radius: 6px; color: var(--kael-text);
+  font-family: var(--kael-font-body); font-size: 0.92rem;
+  transition: all 0.2s ease; resize: vertical;
+}
+.input:focus, .textarea:focus {
+  outline: none; border-color: var(--kael-frost);
+  box-shadow: 0 0 0 3px rgba(78,165,211,.15);
+}
+.errorBox {
+  background: rgba(180,50,50,.16); border: 1px solid rgba(220,80,80,.4);
+  color: #ffb3b3; padding: 0.7rem; border-radius: 6px; font-size: 0.85rem;
+}
+.post {
+  background: var(--kael-panel); border: 1px solid var(--kael-panel-border);
+  border-radius: 8px; padding: 1.2rem 1.4rem;
+}
+.postAuthor { display: flex; align-items: baseline; gap: 0.7rem; margin-bottom: 0.6rem; }
+.postAuthor strong { color: var(--kael-frost-bright); font-size: 0.95rem; }
+.postRole {
+  font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--kael-gold); padding: 0.15rem 0.5rem;
+  border: 1px solid rgba(232,195,115,.4); border-radius: 999px;
+}
+.postMeta { font-size: 0.75rem; color: var(--kael-text-dim); margin-left: auto; }
+.postBody { color: var(--kael-text); line-height: 1.65; white-space: pre-wrap; font-size: 0.95rem; }

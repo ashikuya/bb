@@ -1,10 +1,13 @@
 import { Link } from 'react-router-dom';
 import { navItems } from './data.js';
+import { useAuth } from './auth-context.jsx';
 import { LoginIcon } from './icons.jsx';
 import { KaelthasLogo } from './logo.jsx';
 import styles from './kaelthas.module.css';
 
 export function Header() {
+  const { account } = useAuth();
+
   return (
     <header className={styles.header}>
       <Link to="/" className={styles.logo}>
@@ -21,9 +24,15 @@ export function Header() {
           </Link>
         ))}
       </nav>
-      <Link to="/login" className={styles.loginBtn}>
-        <LoginIcon className={styles.loginIcon} /> Log In
-      </Link>
+      {account ? (
+        <Link to="/account" className={styles.loginBtn}>
+          <LoginIcon className={styles.loginIcon} /> {account.username}
+        </Link>
+      ) : (
+        <Link to="/login" className={styles.loginBtn}>
+          <LoginIcon className={styles.loginIcon} /> Log In
+        </Link>
+      )}
     </header>
   );
 }
