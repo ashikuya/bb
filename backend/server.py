@@ -44,7 +44,7 @@ async def get_pool() -> aiomysql.Pool:
 async def query_one(sql: str, args: tuple = (), db: Optional[str] = None) -> Optional[dict]:
     pool = await get_pool()
     async with pool.acquire() as conn:
-        if db: await conn.select_db(db)
+        await conn.select_db(db or WEB_DB)
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(sql, args)
             return await cur.fetchone()
@@ -52,7 +52,7 @@ async def query_one(sql: str, args: tuple = (), db: Optional[str] = None) -> Opt
 async def query_all(sql: str, args: tuple = (), db: Optional[str] = None) -> list[dict]:
     pool = await get_pool()
     async with pool.acquire() as conn:
-        if db: await conn.select_db(db)
+        await conn.select_db(db or WEB_DB)
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(sql, args)
             return list(await cur.fetchall())
@@ -60,7 +60,7 @@ async def query_all(sql: str, args: tuple = (), db: Optional[str] = None) -> lis
 async def exec_sql(sql: str, args: tuple = (), db: Optional[str] = None) -> int:
     pool = await get_pool()
     async with pool.acquire() as conn:
-        if db: await conn.select_db(db)
+        await conn.select_db(db or WEB_DB)
         async with conn.cursor() as cur:
             await cur.execute(sql, args)
             return cur.lastrowid
