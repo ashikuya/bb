@@ -67,17 +67,6 @@ export function Hero() {
             <span className={styles.heroStatLabel}>XP-Rate</span>
           </div>
         </div>
-
-        <div className={styles.racesStrip}>
-          <div className={styles.racesTitle}>Eigene Völker</div>
-          <div className={styles.racesList}>
-            {customRaces.map((race, i) => (
-              <span key={race}>
-                {race}{i < customRaces.length - 1 ? ' •' : ''}
-              </span>
-            ))}
-          </div>
-        </div>
       </div>
     </section>
   );
