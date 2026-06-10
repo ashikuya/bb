@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { heroImage, customRaces, communityStats } from './data.js';
-import { KaelthasLogo } from './logo.jsx';
+import { customRaces, communityStats } from './data.js';
 import styles from './kaelthas.module.css';
 
 export function Hero() {
@@ -17,9 +16,14 @@ export function Hero() {
 
   return (
     <section id="home" className={styles.hero}>
-      <div className={styles.heroBg} style={{ backgroundImage: `url(${heroImage})` }} />
-      <div className={styles.heroOverlay} />
+      {/* Episches Hintergrundbild — generiert per Nano Banana */}
+      <div className={styles.heroBg}
+        style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/hero-bg.jpg)` }} />
+      {/* Atmosphärische Overlays für Tiefe */}
+      <div className={styles.heroVignette} />
+      <div className={styles.heroAuroraGlow} />
 
+      {/* Statusleiste */}
       <div className={styles.statusBar}>
         <span className={styles.statusItem}>
           <span className={styles.statusDot} /> Realm Online
@@ -33,14 +37,6 @@ export function Hero() {
       </div>
 
       <div className={styles.heroContent}>
-        {/* großer Frostmourne-Logo-Block über dem Titel */}
-        <div className={styles.heroLogoWrap} style={{ marginTop: '5rem' }}>
-          <div className={styles.runeRing} />
-          <div className={styles.runeRingInner} />
-          <div className={styles.logoGlow} />
-          <KaelthasLogo size={260} className={styles.heroLogo} />
-        </div>
-
         <div className={styles.heroKicker}>Wrath of the Lich King · 3.3.5a</div>
 
         <h1 className={styles.heroTitle}>

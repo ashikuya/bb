@@ -18,19 +18,15 @@ Klone das Repo `https://github.com/ashikuya/bb` und bringe es in der Emergent-Pr
 ## Implemented
 - **10.06.2026**: Repo geklont, MariaDB + alle DBs eingerichtet, Backend+Frontend laufen
 - **10.06.2026 (Redesign)**:
-  - Logo getauscht: Neues PNG-Logo (Lich-King/Frostmourne-K) via `mix-blend-mode: screen` integriert (`/app/frontend/src/kaelthas/logo.jsx`)
-  - Großes Hero-Logo zentral über dem Titel mit Rune-Ringen + Glow-Animation
-  - **Komplette Lokalisierung auf Deutsch**:
-    - `data.js` (Navigation, Features, Eigene Völker)
-    - `hero.jsx` (Titel, Untertitel, CTA, Stats)
-    - `features.jsx`, `journey.jsx`, `footer.jsx`, `cookies.jsx`
-    - `header.jsx` (Anmelden-Button)
-    - `login-page.jsx`, `register-page.jsx`
-    - `account-page.jsx` (Profil/Charaktere/Sicherheit-Tabs)
-    - `forum-page.jsx`, `forum-category-page.jsx`, `forum-thread-page.jsx`
-    - Forum-Kategorien in der DB übersetzt (`UPDATE forum_categories`)
-    - Datumsformate auf `de-DE` umgestellt
-  - data-testid Attribute an wichtige interaktive Elemente hinzugefügt
+  - Logo getauscht: Neues PNG-Logo (Lich-King/Frostmourne-K), mix-blend-mode: screen, glow im Header und Footer
+  - Komplette Lokalisierung auf Deutsch (alle Public-Seiten + DB-Kategorien)
+  - data-testid Attribute an wichtige interaktive Elemente
+- **10.06.2026 (Epischer Hero-Hintergrund)**:
+  - Custom Hero-Background per **Gemini Nano Banana** generiert (`/app/frontend/public/hero-bg.jpg`)
+  - Zeigt frostige Eis-Zitadelle, Aurora Borealis, Eiskristalle, eisige Berge — passend zum Logo
+  - Generator-Script: `/tmp/gen_hero.py` (kann erneut ausgeführt werden für andere Versionen)
+  - Hero-CSS: subtle bg-zoom Animation, Vignette, Aurora-Glow-Overlay, kein zentrales Logo mehr
+  - `EMERGENT_LLM_KEY` in `/app/backend/.env` hinterlegt
 
 ## Services
 | Service  | Port | Manager    |

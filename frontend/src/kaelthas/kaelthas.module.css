@@ -145,43 +145,95 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   text-align: center;
-  padding: 8rem 1.5rem 6rem;
-  padding-top: 0;
+  padding: 9rem 1.5rem 6rem;
+  overflow: hidden;
+  isolation: isolate;
 }
 
-/* live status bar pinned under the header */
-.statusBar {
+/* Hintergrund-Bild (Nano-Banana generiert, via inline style gesetzt) */
+.heroBg {
   position: absolute;
-  top: 110px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  animation: bgZoom 22s ease-in-out infinite alternate;
+}
+
+@keyframes bgZoom {
+  0%   { transform: scale(1.0);   filter: brightness(0.9) saturate(1.05); }
+  100% { transform: scale(1.08); filter: brightness(1.0) saturate(1.15); }
+}
+
+/* Dunkle Vignette für Lesbarkeit */
+.heroVignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse 75% 70% at 50% 45%,
+      rgba(5, 9, 18, 0.05) 0%,
+      rgba(5, 9, 18, 0.45) 55%,
+      rgba(5, 9, 18, 0.85) 85%,
+      var(--kael-bg) 100%),
+    linear-gradient(180deg,
+      rgba(5, 9, 18, 0.55) 0%,
+      transparent 25%,
+      transparent 70%,
+      var(--kael-bg) 100%);
+  pointer-events: none;
+}
+
+/* Sanfter Aurora-Schein im oberen Drittel */
+.heroAuroraGlow {
+  position: absolute;
+  top: -10%;
+  left: -10%;
+  right: -10%;
+  height: 70%;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 50% 60% at 30% 40%,
+      rgba(80, 220, 200, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 55% at 75% 35%,
+      rgba(120, 130, 220, 0.16) 0%, transparent 65%);
+  filter: blur(40px);
+  mix-blend-mode: screen;
+  animation: auroraBreath 9s ease-in-out infinite alternate;
+}
+
+@keyframes auroraBreath {
+  0%   { opacity: 0.7; transform: translateX(-2%); }
+  100% { opacity: 1;   transform: translateX(2%);  }
+}
+
+/* live status bar */
+.statusBar {
+  position: relative;
+  z-index: 5;
   display: inline-flex;
   align-items: center;
   gap: 0.9rem;
-  padding: 0.5rem 1.4rem;
-  background: rgba(8, 14, 22, 0.7);
+  margin: 0 auto 2.5rem;
+  padding: 0.55rem 1.5rem;
+  background: rgba(8, 14, 22, 0.78);
   border: 1px solid var(--kael-panel-border);
   border-radius: 999px;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
   font-size: 0.74rem;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--kael-text-dim);
   white-space: nowrap;
+  box-shadow: 0 0 32px rgba(78, 165, 211, 0.25);
 }
 
-.statusItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.statusItem strong {
-  color: var(--kael-frost-bright);
-}
+.statusItem        { display: inline-flex; align-items: center; gap: 0.45rem; }
+.statusItem strong { color: var(--kael-frost-bright); }
 
 .statusDot {
   width: 8px;
@@ -194,7 +246,7 @@
 
 @keyframes pulseDot {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.8); }
+  50%      { opacity: 0.5; transform: scale(0.8); }
 }
 
 .statusDivider {
@@ -203,106 +255,36 @@
   background: var(--kael-panel-border);
 }
 
-/* hero actions row */
-.heroActions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 1.1rem;
-}
-
-.realmBox {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.9rem;
-  padding: 0.85rem 1.1rem 0.85rem 1.3rem;
-  background: rgba(8, 14, 22, 0.7);
-  border: 1px dashed var(--kael-panel-border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: var(--kael-font-body);
-}
-
-.realmBox:hover {
-  border-color: var(--kael-frost);
-  box-shadow: var(--kael-shadow-glow);
-}
-
-.realmCode {
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: var(--kael-frost-bright);
-}
-
-.realmCopy {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--kael-text-dim);
-  padding-left: 0.9rem;
-  border-left: 1px solid var(--kael-panel-border);
-}
-
-.realmCopyIcon {
-  width: 14px;
-  height: 14px;
-}
-
 /* headline stats */
 .heroStats {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 2.5rem;
-  margin-top: 2.6rem;
+  gap: 2.8rem;
+  margin-top: 3rem;
 }
 
 .heroStat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 .heroStatNum {
   font-family: var(--kael-font-display);
   font-weight: 800;
-  font-size: 1.8rem;
+  font-size: 2rem;
   color: var(--kael-frost-bright);
-  text-shadow: 0 0 20px rgba(78, 165, 211, 0.5);
+  text-shadow: 0 0 24px rgba(78, 165, 211, 0.7);
   line-height: 1;
 }
 
 .heroStatLabel {
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
+  font-size: 0.72rem;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--kael-text-dim);
-}
-
-.heroBg {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  z-index: 0;
-}
-
-.heroOverlay {
-  position: absolute;
-  inset: 0;
-  background:
-    /* dark vignette sides */
-    radial-gradient(ellipse at 50% 40%, rgba(5,9,16,0.1), rgba(5,9,16,0.65) 58%, var(--kael-bg) 90%),
-    /* subtle frost atmosphere bottom */
-    linear-gradient(to bottom, transparent 55%, var(--kael-bg) 100%);
-  z-index: 1;
 }
 
 .heroLogoWrap {
