@@ -1,11 +1,24 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { communityStats } from './data.js';
+import { getStatus } from './api.js';
 import styles from './kaelthas.module.css';
 
 export function Journey() {
-  const registered = communityStats.registeredAccounts;
-  const characters = communityStats.createdCharacters;
-  const online = communityStats.playersOnline;
+  const [stats, setStats] = useState({ registeredAccounts: 0, createdCharacters: 0 });
+
+  useEffect(() => {
+    let active = true;
+    getStatus()
+      .then((s) => {
+        if (!active || !s) return;
+        setStats({
+          registeredAccounts: s.registeredAccounts ?? 0,
+          createdCharacters: s.createdCharacters ?? 0,
+        });
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   return (
     <section id="join" className={styles.journey}>
@@ -23,10 +36,10 @@ export function Journey() {
       <div className={styles.statsBox}>
         <div className={styles.statsTitle}>Tritt einer lebendigen Community bei</div>
         <p className={styles.statLine}>
-          Registrierte Accounts: <strong>{registered.toLocaleString('de-DE')}</strong>
+          Registrierte Accounts: <strong>{stats.registeredAccounts.toLocaleString('de-DE')}</strong>
         </p>
         <p className={styles.statLine}>
-          Erstellte Charaktere: <strong>{characters.toLocaleString('de-DE')}</strong>
+          Erstellte Charaktere: <strong>{stats.createdCharacters.toLocaleString('de-DE')}</strong>
         </p>
       </div>
     </section>

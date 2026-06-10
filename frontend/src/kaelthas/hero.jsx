@@ -1,18 +1,42 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { customRaces, communityStats } from './data.js';
+import { getStatus } from './api.js';
 import styles from './kaelthas.module.css';
 
 export function Hero() {
-  const [stats] = useState({
-    playersOnline: communityStats.playersOnline,
-    registeredAccounts: communityStats.registeredAccounts,
-    createdCharacters: communityStats.createdCharacters,
+  // Echte AzerothCore-Daten (mit Polling alle 30 Sekunden)
+  const [stats, setStats] = useState({
+    playersOnline: 0,
+    registeredAccounts: 0,
+    createdCharacters: 0,
+    realmOnline: false,
   });
 
-  const online = stats.playersOnline;
-  const accounts = stats.registeredAccounts;
-  const characters = stats.createdCharacters;
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const s = await getStatus();
+        if (!active || !s) {
+          if (active) setStats((p) => ({ ...p, realmOnline: false }));
+          return;
+        }
+        setStats({
+          playersOnline: s.playersOnline ?? 0,
+          registeredAccounts: s.registeredAccounts ?? 0,
+          createdCharacters: s.createdCharacters ?? 0,
+          realmOnline: s.database === 'connected',
+        });
+      } catch {
+        if (active) setStats((p) => ({ ...p, realmOnline: false }));
+      }
+    }
+    load();
+    const id = setInterval(load, 30000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
+
+  const { playersOnline, registeredAccounts, createdCharacters, realmOnline } = stats;
 
   return (
     <section id="home" className={styles.hero}>
@@ -24,13 +48,20 @@ export function Hero() {
       <div className={styles.heroAuroraGlow} />
 
       {/* Statusleiste */}
-      <div className={styles.statusBar}>
+      <div className={styles.statusBar} data-testid="status-bar">
         <span className={styles.statusItem}>
-          <span className={styles.statusDot} /> Realm Online
+          <span
+            className={styles.statusDot}
+            style={{
+              background: realmOnline ? '#4ade80' : '#ef4444',
+              boxShadow: `0 0 10px ${realmOnline ? '#4ade80' : '#ef4444'}`,
+            }}
+          />
+          Realm {realmOnline ? 'Online' : 'Offline'}
         </span>
         <span className={styles.statusDivider} />
         <span className={styles.statusItem}>
-          <strong>{online}</strong> Spieler online
+          <strong>{playersOnline.toLocaleString('de-DE')}</strong> Spieler online
         </span>
         <span className={styles.statusDivider} />
         <span className={styles.statusItem}>WotLK 3.3.5a</span>
@@ -55,11 +86,15 @@ export function Hero() {
 
         <div className={styles.heroStats}>
           <div className={styles.heroStat}>
-            <span className={styles.heroStatNum}>{accounts.toLocaleString('de-DE')}</span>
+            <span className={styles.heroStatNum} data-testid="hero-accounts">
+              {registeredAccounts.toLocaleString('de-DE')}
+            </span>
             <span className={styles.heroStatLabel}>Accounts</span>
           </div>
           <div className={styles.heroStat}>
-            <span className={styles.heroStatNum}>{characters.toLocaleString('de-DE')}</span>
+            <span className={styles.heroStatNum} data-testid="hero-characters">
+              {createdCharacters.toLocaleString('de-DE')}
+            </span>
             <span className={styles.heroStatLabel}>Charaktere</span>
           </div>
           <div className={styles.heroStat}>
