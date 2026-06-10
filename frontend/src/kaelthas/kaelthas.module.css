@@ -386,26 +386,42 @@
 }
 
 .heroTitle {
-  font-family: var(--kael-font-display);
+  font-family: 'Cinzel Decorative', 'Cinzel', 'Trajan Pro', Georgia, serif;
   font-weight: 900;
-  font-size: clamp(3rem, 9vw, 6.5rem);
+  font-size: clamp(3.2rem, 10vw, 7.5rem);
   line-height: 1;
-  margin: 0 0 1rem;
-  letter-spacing: 0.04em;
+  margin: 0 0 1.4rem;
+  letter-spacing: 0.03em;
   background: linear-gradient(
-    100deg,
-    #eaf6ff 20%,
-    #6fd3ff 40%,
-    #b8ecff 50%,
-    #6fd3ff 60%,
-    #eaf6ff 80%
+    180deg,
+    #fff4c9 0%,
+    #f2d27a 18%,
+    #e8b14a 38%,
+    #c98a2a 58%,
+    #f2d27a 78%,
+    #fff4c9 100%
   );
-  background-size: 220% auto;
+  background-size: 100% 200%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 36px rgba(78, 165, 211, 0.45));
-  animation: frostShimmer 7s linear infinite;
+  filter:
+    drop-shadow(0 2px 0 rgba(60, 30, 5, 0.7))
+    drop-shadow(0 0 24px rgba(255, 200, 90, 0.55))
+    drop-shadow(0 0 60px rgba(255, 170, 50, 0.35));
+  animation: goldShimmer 8s ease-in-out infinite;
+}
+
+@keyframes goldShimmer {
+  0%, 100% { background-position: 0% 0%; }
+  50%      { background-position: 0% 100%; }
+}
+
+/* Ornamentale Linien links und rechts neben dem Titel */
+.heroTitle::before,
+.heroTitle::after {
+  content: '';
+  display: none;
 }
 
 @keyframes frostShimmer {
@@ -414,16 +430,19 @@
 
 .heroTitle span {
   display: block;
+  font-family: 'Cinzel Decorative', 'Cinzel', serif;
   font-size: 0.2em;
-  font-weight: 600;
-  letter-spacing: 0.28em;
-  margin-top: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  margin-top: 1.6rem;
   color: var(--kael-gold);
   -webkit-text-fill-color: var(--kael-gold);
   background: none;
-  filter: none;
+  filter: drop-shadow(0 0 16px rgba(232, 195, 115, 0.5));
   white-space: nowrap;
-  text-shadow: 0 0 18px rgba(232, 195, 115, 0.35);
+  text-shadow:
+    0 2px 0 rgba(40, 22, 5, 0.6),
+    0 0 18px rgba(232, 195, 115, 0.4);
 }
 
 @media (max-width: 560px) {
