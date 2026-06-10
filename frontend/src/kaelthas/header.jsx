@@ -12,9 +12,6 @@ export function Header() {
     <header className={styles.header}>
       <Link to="/" className={styles.logo}>
         <KaelthasLogo size={60} className={styles.logoMark} />
-        <span className={styles.logoText}>
-          KAEL<span className={styles.logoAccent}>THAS</span>
-        </span>
       </Link>
       <nav className={styles.nav}>
         {navItems.map(({ label, href, Icon }) => (
