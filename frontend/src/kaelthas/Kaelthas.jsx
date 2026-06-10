@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import './theme.module.css';
 import styles from './kaelthas.module.css';
 import { AuthProvider } from './auth-context.jsx';
@@ -32,6 +32,8 @@ function LandingPage() {
 }
 
 function SubPageBackdrop() {
+  const { pathname } = useLocation();
+  if (pathname === '/') return null;
   return (
     <>
       <div
