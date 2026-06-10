@@ -87,3 +87,91 @@
 }
 .postMeta { font-size: 0.75rem; color: var(--kael-text-dim); margin-left: auto; }
 .postBody { color: var(--kael-text); line-height: 1.65; white-space: pre-wrap; font-size: 0.95rem; }
+
+/* Thread Header & Mod Bar */
+.threadHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.pinBig, .lockBig {
+  display: inline-block;
+  margin-right: 0.5rem;
+  font-size: 0.7em;
+}
+.pinBig { color: var(--kael-gold); }
+
+.modBar {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(255, 155, 61, 0.08);
+  border: 1px solid rgba(255, 155, 61, 0.3);
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+}
+.modBtn, .modBtnDanger {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid rgba(255, 155, 61, 0.5);
+  background: transparent;
+  color: #ffb86b;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: var(--kael-font-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  transition: all 0.18s;
+}
+.modBtn:hover {
+  background: rgba(255, 155, 61, 0.15);
+  color: #ffd86b;
+}
+.modBtnDanger {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.5);
+}
+.modBtnDanger:hover {
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff8b8b;
+}
+
+/* Role badge on forum posts */
+.postRoleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-left: 0.4rem;
+}
+.postRoleIcon {
+  font-family: var(--kael-font-display);
+  font-weight: 800;
+  font-size: 1em;
+}
+
+.postDelete {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  color: #ff8b8b;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s;
+}
+.postDelete:hover {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ffb3b3;
+}

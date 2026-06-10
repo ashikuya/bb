@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { navItems } from './data.js';
 import { useAuth } from './auth-context.jsx';
-import { LoginIcon } from './icons.jsx';
+import { LoginIcon, ShieldIcon } from './icons.jsx';
 import { KaelthasLogo } from './logo.jsx';
 import styles from './kaelthas.module.css';
 
@@ -23,6 +23,12 @@ export function Header() {
             <span>{label}</span>
           </Link>
         ))}
+        {account?.isAdmin && (
+          <Link to="/admin" className={styles.navLink} style={{ color: '#ffb86b' }}>
+            <ShieldIcon className={styles.navIcon} />
+            <span>Admin</span>
+          </Link>
+        )}
       </nav>
       {account ? (
         <Link to="/account" className={styles.loginBtn}>

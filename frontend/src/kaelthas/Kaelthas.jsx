@@ -15,6 +15,7 @@ import { AccountPage } from './account-page.jsx';
 import { ForumPage } from './forum-page.jsx';
 import { ForumCategoryPage } from './forum-category-page.jsx';
 import { ForumThreadPage } from './forum-thread-page.jsx';
+import { AdminPage } from './admin-page.jsx';
 
 function LandingPage() {
   return (
@@ -41,6 +42,7 @@ export function Kaelthas() {
         <Route path="/forum" element={<ForumPage />} />
         <Route path="/forum/:slug" element={<ForumCategoryPage />} />
         <Route path="/forum/:slug/:threadId" element={<ForumThreadPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Routes>
     </AuthProvider>
   );

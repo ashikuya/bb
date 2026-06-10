@@ -69,3 +69,41 @@ export const createThread = (slug, title, content) =>
 
 export const replyToThread = (threadId, content) =>
   unwrap(client.post(`/forum/threads/${threadId}/posts`, { content }));
+
+export const getForumRoles = async () => {
+  try {
+    const d = await unwrap(client.get('/forum/roles'));
+    return d.roles || [];
+  } catch { return []; }
+};
+
+// ── Admin ───────────────────────────────────────────────
+export const adminListUsers = (q = '', limit = 50) =>
+  unwrap(client.get('/admin/users', { params: { q, limit } }));
+
+export const adminGrantRole = (accountId, role) =>
+  unwrap(client.post(`/admin/users/${accountId}/roles`, { role }));
+
+export const adminRevokeRole = (accountId, roleSlug) =>
+  unwrap(client.delete(`/admin/users/${accountId}/roles/${roleSlug}`));
+
+export const adminUpdateRole = (slug, patch) =>
+  unwrap(client.put(`/admin/roles/${slug}`, patch));
+
+export const adminCreateRole = (data) =>
+  unwrap(client.post('/admin/roles', data));
+
+export const adminDeleteRole = (slug) =>
+  unwrap(client.delete(`/admin/roles/${slug}`));
+
+export const adminPinThread = (id, pinned) =>
+  unwrap(client.post(`/admin/threads/${id}/pin`, { pinned }));
+
+export const adminLockThread = (id, locked) =>
+  unwrap(client.post(`/admin/threads/${id}/lock`, { locked }));
+
+export const adminDeleteThread = (id) =>
+  unwrap(client.delete(`/admin/threads/${id}`));
+
+export const adminDeletePost = (id) =>
+  unwrap(client.delete(`/admin/posts/${id}`));

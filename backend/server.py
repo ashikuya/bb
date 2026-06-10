@@ -93,6 +93,69 @@ async def require_account(request: Request) -> dict:
         raise HTTPException(401, detail={"error": "Not authenticated."})
     return acc
 
+# ── Roles / Admin ───────────────────────────────────────────────────────────
+async def get_user_roles(account_id: int) -> list[str]:
+    """Returns list of role slugs assigned to this account (web roles + auto-mapped GM-Level)."""
+    roles = await query_all(
+        "SELECT role_slug FROM user_roles WHERE account_id=%s", (account_id,),
+    )
+    slugs = [r["role_slug"] for r in roles]
+
+    # Auto-map AzerothCore gmlevel → role (only if not already manually set)
+    try:
+        gm = await query_one(
+            "SELECT MAX(gmlevel) AS gm FROM account_access WHERE id=%s",
+            (account_id,), db=AUTH_DB,
+        )
+        gmlevel = (gm or {}).get("gm") or 0
+        if gmlevel >= 3 and "admin" not in slugs: slugs.append("admin")
+        elif gmlevel == 2 and "gm" not in slugs:  slugs.append("gm")
+        elif gmlevel == 1 and "mod" not in slugs: slugs.append("mod")
+    except Exception:
+        pass
+
+    if not slugs:
+        slugs = ["player"]
+    return slugs
+
+async def top_role(account_id: int) -> dict:
+    """Returns the highest-ranked role for this account (used for forum badges)."""
+    slugs = await get_user_roles(account_id)
+    if not slugs:
+        return {"slug": "player", "name": "Player", "color": "#cdd9e6",
+                "badge_bg": "rgba(78,165,211,0.10)",
+                "badge_border": "rgba(78,165,211,0.35)", "icon": "*"}
+    placeholders = ",".join(["%s"] * len(slugs))
+    row = await query_one(
+        f"SELECT slug, name, color, badge_bg, badge_border, icon, rank_level "
+        f"FROM forum_roles WHERE slug IN ({placeholders}) "
+        f"ORDER BY rank_level DESC LIMIT 1",
+        tuple(slugs),
+    )
+    return row or {"slug": "player", "name": "Player", "color": "#cdd9e6",
+                   "badge_bg": "rgba(78,165,211,0.10)",
+                   "badge_border": "rgba(78,165,211,0.35)", "icon": "*"}
+
+async def is_admin(account_id: int) -> bool:
+    roles = await get_user_roles(account_id)
+    return any(r in {"owner", "admin"} for r in roles)
+
+async def is_mod(account_id: int) -> bool:
+    roles = await get_user_roles(account_id)
+    return any(r in {"owner", "admin", "gm", "mod"} for r in roles)
+
+async def require_admin(request: Request) -> dict:
+    acc = await require_account(request)
+    if not await is_admin(acc["id"]):
+        raise HTTPException(403, detail={"error": "Admin access required."})
+    return acc
+
+async def require_mod(request: Request) -> dict:
+    acc = await require_account(request)
+    if not await is_mod(acc["id"]):
+        raise HTTPException(403, detail={"error": "Moderator access required."})
+    return acc
+
 # ── Models ──────────────────────────────────────────────────────────────────
 class RegisterIn(BaseModel):
     username: str
@@ -171,7 +234,12 @@ async def logout(request: Request, response: Response):
 
 @api.get("/me")
 async def me(acc: dict = Depends(require_account)):
-    return {"account": serialize(acc)}
+    roles = await get_user_roles(acc["id"])
+    out = serialize(acc)
+    out["roles"] = roles
+    out["isAdmin"] = any(r in {"owner", "admin"} for r in roles)
+    out["isMod"]   = any(r in {"owner", "admin", "gm", "mod"} for r in roles)
+    return {"account": out}
 
 @api.post("/account/password")
 async def change_pw(body: PwChange, acc: dict = Depends(require_account)):
@@ -263,14 +331,33 @@ def _thread_to_api(t: dict) -> dict:
         "lastReplyAuthor": t["last_reply_by"],
     }
 
-def _post_to_api(p: dict) -> dict:
-    return {
+def _post_to_api(p: dict, role: Optional[dict] = None) -> dict:
+    out = {
         "_id": p["id"], "threadId": p["thread_id"],
         "authorId": p["author_id"], "authorName": p["author_name"],
         "authorRole": p["author_role"], "authorPostCount": 1,
         "content": p["content"], "createdAt": str(p["created_at"]),
         "updatedAt": str(p["created_at"]), "edited": bool(p["edited"]),
     }
+    if role:
+        out["roleName"]   = role.get("name")
+        out["roleColor"]  = role.get("color")
+        out["roleBg"]     = role.get("badge_bg")
+        out["roleBorder"] = role.get("badge_border")
+        out["roleIcon"]   = role.get("icon")
+        out["roleSlug"]   = role.get("slug")
+    return out
+
+async def _enrich_posts(posts: list[dict]) -> list[dict]:
+    """Attach top-role info to each post in one pass."""
+    out = []
+    cache: dict[int, dict] = {}
+    for p in posts:
+        aid = p["author_id"]
+        if aid not in cache:
+            cache[aid] = await top_role(aid)
+        out.append(_post_to_api(p, cache[aid]))
+    return out
 
 @api.get("/forum/categories")
 async def list_categories():
@@ -337,7 +424,7 @@ async def get_thread(thread_id: str, page: int = 1):
     )
     return {
         "thread": _thread_to_api(t),
-        "posts": [_post_to_api(p) for p in posts],
+        "posts": await _enrich_posts(posts),
         "total": total, "pages": (total + per - 1) // per or 1,
     }
 
@@ -360,7 +447,137 @@ async def reply(thread_id: str, body: PostIn, acc: dict = Depends(require_accoun
         "WHERE id=%s", (uname, thread_id),
     )
     p = await query_one("SELECT * FROM forum_posts WHERE id=%s", (pid,))
-    return {"post": _post_to_api(p)}
+    role = await top_role(acc["id"])
+    return {"post": _post_to_api(p, role)}
+
+# ── Forum: Public roles list (for legend / admin UI) ────────────────────────
+@api.get("/forum/roles")
+async def list_forum_roles():
+    rows = await query_all(
+        "SELECT slug, name, color, badge_bg, badge_border, icon, rank_level, sort_order "
+        "FROM forum_roles ORDER BY sort_order"
+    )
+    return {"roles": rows}
+
+# ── Admin Endpoints ─────────────────────────────────────────────────────────
+@api.get("/admin/users")
+async def admin_list_users(q: str = "", limit: int = 50, _: dict = Depends(require_admin)):
+    if q:
+        rows = await query_all(
+            "SELECT id, username, email, joindate, last_login, online FROM account "
+            "WHERE username LIKE %s OR email LIKE %s ORDER BY id DESC LIMIT %s",
+            (f"%{q.upper()}%", f"%{q.lower()}%", min(limit, 200)), db=AUTH_DB,
+        )
+    else:
+        rows = await query_all(
+            "SELECT id, username, email, joindate, last_login, online FROM account "
+            "ORDER BY id DESC LIMIT %s", (min(limit, 200),), db=AUTH_DB,
+        )
+    # Attach roles
+    out = []
+    for r in rows:
+        roles = await get_user_roles(r["id"])
+        out.append({
+            "id": r["id"], "username": r["username"].lower() if isinstance(r["username"], str) else r["username"],
+            "email": r["email"] or "",
+            "joinDate": str(r["joindate"]) if r["joindate"] else None,
+            "lastLogin": str(r["last_login"]) if r["last_login"] else None,
+            "online": bool(r["online"]),
+            "roles": roles,
+        })
+    return {"users": out}
+
+@api.post("/admin/users/{account_id}/roles")
+async def admin_grant_role(account_id: int, body: dict, admin: dict = Depends(require_admin)):
+    role_slug = body.get("role")
+    if not role_slug:
+        raise HTTPException(400, detail={"error": "Missing 'role'."})
+    role = await query_one("SELECT slug FROM forum_roles WHERE slug=%s", (role_slug,))
+    if not role:
+        raise HTTPException(404, detail={"error": "Role not found."})
+    await exec_sql(
+        "INSERT IGNORE INTO user_roles (account_id, role_slug, granted_by) VALUES (%s, %s, %s)",
+        (account_id, role_slug, admin["id"]),
+    )
+    return {"ok": True, "roles": await get_user_roles(account_id)}
+
+@api.delete("/admin/users/{account_id}/roles/{role_slug}")
+async def admin_revoke_role(account_id: int, role_slug: str, _: dict = Depends(require_admin)):
+    await exec_sql(
+        "DELETE FROM user_roles WHERE account_id=%s AND role_slug=%s",
+        (account_id, role_slug),
+    )
+    return {"ok": True, "roles": await get_user_roles(account_id)}
+
+@api.put("/admin/roles/{role_slug}")
+async def admin_update_role(role_slug: str, body: dict, _: dict = Depends(require_admin)):
+    """Update a forum role (color, badge, icon, name)."""
+    allowed = {"name", "color", "badge_bg", "badge_border", "icon", "rank_level", "sort_order"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        raise HTTPException(400, detail={"error": "No valid fields to update."})
+    cols = ", ".join(f"{k}=%s" for k in updates.keys())
+    await exec_sql(f"UPDATE forum_roles SET {cols} WHERE slug=%s",
+                   tuple(list(updates.values()) + [role_slug]))
+    row = await query_one("SELECT * FROM forum_roles WHERE slug=%s", (role_slug,))
+    return {"role": row}
+
+@api.post("/admin/roles")
+async def admin_create_role(body: dict, _: dict = Depends(require_admin)):
+    slug = (body.get("slug") or "").strip().lower()
+    if not re.match(r"^[a-z0-9_-]{2,32}$", slug):
+        raise HTTPException(400, detail={"error": "Invalid slug."})
+    await exec_sql(
+        "INSERT INTO forum_roles (slug, name, color, badge_bg, badge_border, icon, rank_level, sort_order) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (slug, body.get("name", slug.title()),
+         body.get("color", "#cdd9e6"),
+         body.get("badge_bg", "rgba(78,165,211,0.15)"),
+         body.get("badge_border", "rgba(78,165,211,0.5)"),
+         body.get("icon", ""),
+         int(body.get("rank_level", 10)),
+         int(body.get("sort_order", 50))),
+    )
+    return {"ok": True}
+
+@api.delete("/admin/roles/{role_slug}")
+async def admin_delete_role(role_slug: str, _: dict = Depends(require_admin)):
+    if role_slug in {"player", "admin", "owner"}:
+        raise HTTPException(400, detail={"error": "Cannot delete protected role."})
+    await exec_sql("DELETE FROM user_roles WHERE role_slug=%s", (role_slug,))
+    await exec_sql("DELETE FROM forum_roles WHERE slug=%s", (role_slug,))
+    return {"ok": True}
+
+# ── Forum moderation ────────────────────────────────────────────────────────
+@api.post("/admin/threads/{thread_id}/pin")
+async def admin_pin(thread_id: str, body: dict, _: dict = Depends(require_mod)):
+    await exec_sql("UPDATE forum_threads SET pinned=%s WHERE id=%s",
+                   (1 if body.get("pinned") else 0, thread_id))
+    return {"ok": True}
+
+@api.post("/admin/threads/{thread_id}/lock")
+async def admin_lock(thread_id: str, body: dict, _: dict = Depends(require_mod)):
+    await exec_sql("UPDATE forum_threads SET locked=%s WHERE id=%s",
+                   (1 if body.get("locked") else 0, thread_id))
+    return {"ok": True}
+
+@api.delete("/admin/threads/{thread_id}")
+async def admin_delete_thread(thread_id: str, _: dict = Depends(require_mod)):
+    await exec_sql("DELETE FROM forum_posts WHERE thread_id=%s", (thread_id,))
+    await exec_sql("DELETE FROM forum_threads WHERE id=%s", (thread_id,))
+    return {"ok": True}
+
+@api.delete("/admin/posts/{post_id}")
+async def admin_delete_post(post_id: str, _: dict = Depends(require_mod)):
+    p = await query_one("SELECT thread_id FROM forum_posts WHERE id=%s", (post_id,))
+    if not p:
+        raise HTTPException(404, detail={"error": "Post not found."})
+    await exec_sql("DELETE FROM forum_posts WHERE id=%s", (post_id,))
+    await exec_sql(
+        "UPDATE forum_threads SET reply_count=GREATEST(reply_count-1, 0) WHERE id=%s",
+        (p["thread_id"],),
+    )
+    return {"ok": True}
 
 # ── Lifecycle ───────────────────────────────────────────────────────────────
 @app.on_event("startup")
