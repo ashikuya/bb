@@ -1,19 +1,17 @@
 import {
   HomeIcon,
   ShieldIcon,
-  StarIcon,
   HelpIcon,
   DiscordIcon,
   ChatIcon,
 } from './icons.jsx';
 
 export const navItems = [
-  { label: 'Start',     href: '/',         Icon: HomeIcon },
-  { label: 'Armory',    href: '/#armory',  Icon: ShieldIcon },
-  { label: 'Forum',     href: '/forum',    Icon: ChatIcon },
-  { label: 'Voten',     href: '/#vote',    Icon: StarIcon },
-  { label: 'Hilfe',     href: '/#support', Icon: HelpIcon },
-  { label: 'Discord',   href: '/#discord', Icon: DiscordIcon },
+  { label: 'Start',     href: '/',                   Icon: HomeIcon },
+  { label: 'Armory',    href: '/account',            Icon: ShieldIcon },
+  { label: 'Forum',     href: '/forum',              Icon: ChatIcon },
+  { label: 'Hilfe',     href: '/forum/support',      Icon: HelpIcon },
+  { label: 'Discord',   href: 'https://discord.gg/', Icon: DiscordIcon, external: true },
 ];
 
 export const realmlist = 'set realmlist logon.kaelthas.com';

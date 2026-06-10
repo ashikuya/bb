@@ -14,11 +14,18 @@ export function Header() {
         <KaelthasLogo size={60} className={styles.logoMark} />
       </Link>
       <nav className={styles.nav}>
-        {navItems.map(({ label, href, Icon }) => (
-          <Link key={label} to={href} className={styles.navLink}>
-            <Icon className={styles.navIcon} />
-            <span>{label}</span>
-          </Link>
+        {navItems.map(({ label, href, Icon, external }) => (
+          external ? (
+            <a key={label} href={href} target="_blank" rel="noreferrer" className={styles.navLink}>
+              <Icon className={styles.navIcon} />
+              <span>{label}</span>
+            </a>
+          ) : (
+            <Link key={label} to={href} className={styles.navLink}>
+              <Icon className={styles.navIcon} />
+              <span>{label}</span>
+            </Link>
+          )
         ))}
         {account?.isAdmin && (
           <Link to="/admin" className={styles.navLink} style={{ color: '#ffb86b' }}>

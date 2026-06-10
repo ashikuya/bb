@@ -1,9 +1,10 @@
 .page {
   min-height: 100vh;
-  background: var(--kael-bg);
+  background: transparent;
   color: var(--kael-text);
   font-family: var(--kael-font-body);
   overflow-x: hidden;
+  position: relative;
 }
 
 /* ---------- Header ---------- */
@@ -386,8 +387,8 @@
 }
 
 .heroTitle {
-  font-family: 'Marcellus SC', 'Marcellus', 'Cinzel', Georgia, serif;
-  font-weight: 400;
+  font-family: var(--kael-font-display);
+  font-weight: 900;
   font-size: clamp(3rem, 9vw, 6.5rem);
   line-height: 1;
   margin: 0 0 1rem;
@@ -414,9 +415,8 @@
 
 .heroTitle span {
   display: block;
-  font-family: 'Marcellus SC', 'Marcellus', 'Cinzel', serif;
   font-size: 0.2em;
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: 0.28em;
   margin-top: 1.4rem;
   color: var(--kael-gold);

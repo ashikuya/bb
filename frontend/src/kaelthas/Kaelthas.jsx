@@ -31,9 +31,40 @@ function LandingPage() {
   );
 }
 
+function SubPageBackdrop() {
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: -2,
+          backgroundImage: `url(${process.env.PUBLIC_URL}/hero-bg.jpg)`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center top',
+          backgroundRepeat: 'no-repeat',
+          filter: 'brightness(0.55) saturate(1.05)',
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: -1,
+          background:
+            'radial-gradient(ellipse 90% 80% at 50% 35%, rgba(5,9,18,0.45) 0%, rgba(5,9,18,0.8) 60%, rgba(5,9,18,0.95) 100%), linear-gradient(180deg, rgba(5,9,18,0.65), rgba(5,9,18,0.92))',
+        }}
+      />
+    </>
+  );
+}
+
 export function Kaelthas() {
   return (
     <AuthProvider>
+      <SubPageBackdrop />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/register" element={<RegisterPage />} />
