@@ -23,14 +23,14 @@ export function ForumPage() {
       <Frost count={30} />
       <Header />
       <div className={styles.wrap}>
-        <Link to="/" className={styles.backLink}>← Back to Homepage</Link>
+        <Link to="/" className={styles.backLink}>← Zurück zur Startseite</Link>
         <h1 className={styles.pageTitle}>Forum</h1>
-        <p className={styles.pageSub}>Discuss strategy, share screenshots, recruit guildmates.</p>
+        <p className={styles.pageSub}>Diskutiere Strategien, teile Screenshots, rekrutiere Gildenmitglieder.</p>
 
         {loading ? (
-          <div className={styles.empty}>Loading...</div>
+          <div className={styles.empty}>Lädt…</div>
         ) : categories.length === 0 ? (
-          <div className={styles.empty}>No categories yet.</div>
+          <div className={styles.empty}>Noch keine Kategorien vorhanden.</div>
         ) : (
           <div className={styles.catList}>
             {categories.map((c) => (
@@ -41,8 +41,8 @@ export function ForumPage() {
                   <p className={styles.catDesc}>{c.description}</p>
                 </div>
                 <div className={styles.catStats}>
-                  <span><strong>{c.threadCount}</strong> threads</span>
-                  <span><strong>{c.postCount}</strong> posts</span>
+                  <span><strong>{c.threadCount}</strong> Themen</span>
+                  <span><strong>{c.postCount}</strong> Beiträge</span>
                 </div>
               </Link>
             ))}

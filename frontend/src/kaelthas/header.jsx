@@ -31,12 +31,12 @@ export function Header() {
         )}
       </nav>
       {account ? (
-        <Link to="/account" className={styles.loginBtn}>
+        <Link to="/account" className={styles.loginBtn} data-testid="header-account-btn">
           <LoginIcon className={styles.loginIcon} /> {account.username}
         </Link>
       ) : (
-        <Link to="/login" className={styles.loginBtn}>
-          <LoginIcon className={styles.loginIcon} /> Log In
+        <Link to="/login" className={styles.loginBtn} data-testid="header-login-btn">
+          <LoginIcon className={styles.loginIcon} /> Anmelden
         </Link>
       )}
     </header>

@@ -44,12 +44,12 @@ export function ForumThreadPage() {
   async function togglePin()    { await adminPinThread(threadId, !data.thread.pinned); await load(); }
   async function toggleLock()   { await adminLockThread(threadId, !data.thread.locked); await load(); }
   async function deleteThread() {
-    if (!window.confirm('Delete entire thread?')) return;
+    if (!window.confirm('Gesamtes Thema löschen?')) return;
     await adminDeleteThread(threadId);
     navigate(`/forum/${slug}`);
   }
   async function deletePost(pid) {
-    if (!window.confirm('Delete this post?')) return;
+    if (!window.confirm('Diesen Beitrag löschen?')) return;
     await adminDeletePost(pid); await load();
   }
 
@@ -60,11 +60,11 @@ export function ForumThreadPage() {
       <Frost count={30} />
       <Header />
       <div className={styles.wrap}>
-        <Link to={`/forum/${slug}`} className={styles.backLink}>← Back to Category</Link>
+        <Link to={`/forum/${slug}`} className={styles.backLink}>← Zurück zur Kategorie</Link>
         {loading ? (
-          <div className={styles.empty}>Loading thread...</div>
+          <div className={styles.empty}>Lade Thema…</div>
         ) : !data ? (
-          <div className={styles.empty}>Thread not found.</div>
+          <div className={styles.empty}>Thema nicht gefunden.</div>
         ) : (
           <>
             <div className={styles.threadHeaderRow}>
@@ -75,19 +75,19 @@ export function ForumThreadPage() {
                   {data.thread.title}
                 </h1>
                 <p className={styles.pageSub}>
-                  by <strong>{data.thread.authorName}</strong> · {new Date(data.thread.createdAt).toLocaleString()}
-                  · {data.thread.views} views · {data.thread.replyCount} replies
+                  von <strong>{data.thread.authorName}</strong> · {new Date(data.thread.createdAt).toLocaleString('de-DE')}
+                  · {data.thread.views} Aufrufe · {data.thread.replyCount} Antworten
                 </p>
               </div>
               {isMod && (
                 <div className={styles.modBar}>
                   <button className={styles.modBtn} onClick={togglePin}>
-                    {data.thread.pinned ? 'Unpin' : 'Pin'}
+                    {data.thread.pinned ? 'Lösen' : 'Anpinnen'}
                   </button>
                   <button className={styles.modBtn} onClick={toggleLock}>
-                    {data.thread.locked ? 'Unlock' : 'Lock'}
+                    {data.thread.locked ? 'Entsperren' : 'Sperren'}
                   </button>
-                  <button className={styles.modBtnDanger} onClick={deleteThread}>Delete</button>
+                  <button className={styles.modBtnDanger} onClick={deleteThread}>Löschen</button>
                 </div>
               )}
             </div>
@@ -123,12 +123,12 @@ export function ForumThreadPage() {
                       </span>
                     )}
                     <dl className={styles.wbbMeta}>
-                      <div><dt>Posts</dt><dd>{p.authorPostCount}</dd></div>
+                      <div><dt>Beiträge</dt><dd>{p.authorPostCount}</dd></div>
                       {p.authorJoinDate && (
-                        <div><dt>Joined</dt><dd>{new Date(p.authorJoinDate).toLocaleDateString()}</dd></div>
+                        <div><dt>Beigetreten</dt><dd>{new Date(p.authorJoinDate).toLocaleDateString('de-DE')}</dd></div>
                       )}
                       {p.location && (
-                        <div><dt>Location</dt><dd>{p.location}</dd></div>
+                        <div><dt>Standort</dt><dd>{p.location}</dd></div>
                       )}
                     </dl>
                   </aside>
@@ -137,11 +137,11 @@ export function ForumThreadPage() {
                     <header className={styles.wbbHeader}>
                       <span className={styles.wbbNum}>#{i + 1}</span>
                       <span className={styles.wbbDate}>
-                        {new Date(p.createdAt).toLocaleString()}
+                        {new Date(p.createdAt).toLocaleString('de-DE')}
                       </span>
                       {isMod && (
                         <button className={styles.postDelete} onClick={() => deletePost(p._id)}
-                          title="Delete post">×</button>
+                          title="Beitrag löschen">×</button>
                       )}
                     </header>
                     <div className={styles.wbbBody}>{p.content}</div>
@@ -155,20 +155,20 @@ export function ForumThreadPage() {
 
             {account ? (
               data.thread.locked ? (
-                <p className={styles.empty}>🔒 This thread is locked.</p>
+                <p className={styles.empty}>🔒 Dieses Thema ist gesperrt.</p>
               ) : (
                 <form className={styles.newForm} onSubmit={onReply}>
                   {error && <div className={styles.errorBox}>{error}</div>}
-                  <textarea className={styles.textarea} rows={5} placeholder="Write a reply..."
+                  <textarea className={styles.textarea} rows={5} placeholder="Antwort schreiben…"
                     value={reply} onChange={(e) => setReply(e.target.value)} required />
                   <button type="submit" className={styles.actionBtn} disabled={busy}>
-                    {busy ? 'Posting...' : 'Reply'}
+                    {busy ? 'Wird gesendet…' : 'Antworten'}
                   </button>
                 </form>
               )
             ) : (
               <p className={styles.empty}>
-                <Link to="/login" className={styles.backLink}>Log in</Link> to reply.
+                <Link to="/login" className={styles.backLink}>Melde dich an</Link>, um zu antworten.
               </p>
             )}
           </>

@@ -23,7 +23,7 @@ export function LoginPage() {
       await login(username, password);
       navigate('/account');
     } catch (err) {
-      setError(err.message || 'Login failed.');
+      setError(err.message || 'Anmeldung fehlgeschlagen.');
     } finally {
       setBusy(false);
     }
@@ -34,35 +34,35 @@ export function LoginPage() {
       <Frost count={40} />
       <Header />
       <div className={styles.wrap}>
-        <form className={styles.panel} onSubmit={onSubmit}>
-          <Link to="/" className={styles.backLink}>← Back to Homepage</Link>
+        <form className={styles.panel} onSubmit={onSubmit} data-testid="login-form">
+          <Link to="/" className={styles.backLink}>← Zurück zur Startseite</Link>
           <KaelthasLogo size={88} className={styles.panelLogo} />
-          <h1 className={styles.title}>Welcome Back</h1>
-          <p className={styles.subtitle}>The Frozen Throne awaits you</p>
+          <h1 className={styles.title}>Willkommen zurück</h1>
+          <p className={styles.subtitle}>Der Frostthron erwartet dich</p>
 
-          {error && <div className={styles.error}>{error}</div>}
+          {error && <div className={styles.error} data-testid="login-error">{error}</div>}
 
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="login-user">Account Name</label>
-            <input id="login-user" className={styles.input} value={username}
+            <label className={styles.label} htmlFor="login-user">Account-Name</label>
+            <input id="login-user" data-testid="login-username-input" className={styles.input} value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Your account name" autoComplete="username" />
+              placeholder="Dein Account-Name" autoComplete="username" />
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="login-pass">Password</label>
-            <input id="login-pass" type="password" className={styles.input}
+            <label className={styles.label} htmlFor="login-pass">Passwort</label>
+            <input id="login-pass" data-testid="login-password-input" type="password" className={styles.input}
               value={password} onChange={(e) => setPassword(e.target.value)}
-              placeholder="Your password" autoComplete="current-password" />
+              placeholder="Dein Passwort" autoComplete="current-password" />
           </div>
 
-          <button type="submit" className={styles.submit} disabled={busy}>
-            {busy ? 'Signing in...' : 'Log In'}
+          <button type="submit" data-testid="login-submit-btn" className={styles.submit} disabled={busy}>
+            {busy ? 'Anmelden…' : 'Anmelden'}
           </button>
 
           <p className={styles.switch}>
-            New to Kaelthas?{' '}
-            <Link to="/register" className={styles.switchLink}>Create an Account</Link>
+            Neu bei Kaelthas?{' '}
+            <Link to="/register" className={styles.switchLink}>Account erstellen</Link>
           </p>
         </form>
       </div>

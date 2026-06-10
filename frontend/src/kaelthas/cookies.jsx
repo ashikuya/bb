@@ -10,19 +10,20 @@ export function Cookies() {
       <div className={styles.panel}>
         <h3 className={styles.title}>Cookies</h3>
         <p className={styles.text}>
-          This website uses cookies to store data. We do not use tracking or
-          advertising cookies and all of our cookies are necessary for the site
-          to work correctly.
+          Diese Website verwendet Cookies, um Daten zu speichern. Wir nutzen
+          weder Tracking- noch Werbe-Cookies – alle unsere Cookies sind
+          technisch notwendig, damit die Seite korrekt funktioniert.
           <br />
-          See also: <a href="#privacy" className={styles.link}>Privacy Policy</a>
+          Siehe auch: <a href="#privacy" className={styles.link}>Datenschutzerklärung</a>
         </p>
         <div className={styles.actions}>
           <button
             type="button"
             className={styles.okay}
+            data-testid="cookies-okay-btn"
             onClick={() => setVisible(false)}
           >
-            Okay
+            Verstanden
           </button>
         </div>
       </div>

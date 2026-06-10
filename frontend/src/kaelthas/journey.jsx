@@ -10,27 +10,27 @@ export function Journey() {
   return (
     <section id="join" className={styles.journey}>
       <div className={styles.sectionHead}>
-        <h2 className={styles.sectionTitle}>START YOUR JOURNEY</h2>
+        <h2 className={styles.sectionTitle}>STARTE DEINE REISE</h2>
         <p className={styles.sectionSub}>
-          Join us today and experience Northrend like never before.
+          Werde noch heute Teil von Kaelthas und erlebe Nordend wie nie zuvor.
         </p>
       </div>
 
-      <Link to="/register" className={`${styles.cta} ${styles.ctaLarge}`}>
-        Join Now
+      <Link to="/register" className={`${styles.cta} ${styles.ctaLarge}`} data-testid="journey-join-btn">
+        Jetzt beitreten
       </Link>
 
       <div className={styles.statsBox}>
-        <div className={styles.statsTitle}>Join A Thriving Community</div>
+        <div className={styles.statsTitle}>Tritt einer lebendigen Community bei</div>
         <p className={styles.statLine}>
-          Registered Accounts: <strong>{registered.toLocaleString()}</strong>
+          Registrierte Accounts: <strong>{registered.toLocaleString('de-DE')}</strong>
         </p>
         <p className={styles.statLine}>
-          Created Characters: <strong>{characters.toLocaleString()}</strong>
+          Erstellte Charaktere: <strong>{characters.toLocaleString('de-DE')}</strong>
         </p>
         <div className={styles.onlinePill}>
           <span className={styles.onlineDot} />
-          {online} Players Online
+          {online} Spieler online
         </div>
       </div>
     </section>

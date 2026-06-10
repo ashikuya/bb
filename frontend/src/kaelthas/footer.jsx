@@ -8,12 +8,12 @@ import {
 import styles from './kaelthas.module.css';
 
 const footerLinks = [
-  'Home',
-  'Imprint',
-  'Terms of Service',
-  'Privacy Policy',
-  'Refund Policy',
-  'Rules',
+  'Start',
+  'Impressum',
+  'Nutzungsbedingungen',
+  'Datenschutz',
+  'Rückerstattung',
+  'Regeln',
 ];
 
 const socials = [
@@ -26,7 +26,7 @@ const socials = [
 export function Footer() {
   return (
     <footer className={styles.footer}>
-      <KaelthasLogo size={110} className={styles.footerLogo} />
+      <KaelthasLogo size={120} className={styles.footerLogo} />
 
       <div className={styles.socials}>
         {socials.map(({ label, href, Icon, className }) => (
@@ -45,14 +45,15 @@ export function Footer() {
       </nav>
 
       <p className={styles.footerNote}>
-        "World of Warcraft" and "Blizzard Entertainment" are all trademarks or
-        registered trademarks of Blizzard Entertainment in the United States
-        and/or other countries. These terms and all related materials, logos,
-        and images are copyright © Blizzard Entertainment. This site is in no
-        way associated with or endorsed by Blizzard Entertainment.
+        „World of Warcraft" und „Blizzard Entertainment" sind Marken oder
+        eingetragene Marken von Blizzard Entertainment in den USA und/oder
+        anderen Ländern. Alle entsprechenden Begriffe, Materialien, Logos und
+        Bilder sind Copyright © Blizzard Entertainment. Diese Seite steht
+        in keiner Verbindung zu Blizzard Entertainment und wird nicht von
+        Blizzard Entertainment unterstützt.
       </p>
       <p className={styles.footerVersion}>
-        All rights reserved. © KAELTHAS — v3.3.5a
+        Alle Rechte vorbehalten. © KAELTHAS — v3.3.5a
       </p>
     </footer>
   );
