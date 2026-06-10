@@ -107,3 +107,19 @@ export const adminDeleteThread = (id) =>
 
 export const adminDeletePost = (id) =>
   unwrap(client.delete(`/admin/posts/${id}`));
+
+// ── Profile / Avatar ───────────────────────────────────
+export const updateProfile = (data) =>
+  unwrap(client.post('/account/profile', data));
+
+export const removeAvatar = () =>
+  unwrap(client.delete('/account/avatar'));
+
+export async function uploadAvatar(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await client.post('/account/avatar', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}

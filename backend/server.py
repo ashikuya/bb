@@ -1,11 +1,12 @@
 """Kaelthas backend — pure MySQL (uses AzerothCore acore_auth + kaelthas_web)."""
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pydantic import BaseModel, EmailStr, Field
 from pathlib import Path
 from typing import Optional, AsyncIterator
-import os, uuid, re, logging, secrets, aiomysql
+import os, uuid, re, logging, secrets, aiomysql, shutil
 
 import srp6
 
@@ -27,6 +28,13 @@ MYSQL_PASS = os.environ.get("MYSQL_PASS", "")
 WEB_DB     = os.environ.get("WEB_DB",   "kaelthas_web")
 AUTH_DB    = os.environ.get("AUTH_DB",  "acore_auth")
 CHARS_DB   = os.environ.get("CHARS_DB", "acore_characters")
+
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(ROOT_DIR / "uploads")))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOAD_DIR / "avatars").mkdir(exist_ok=True)
+PUBLIC_UPLOADS_PATH = "/api/uploads"
+MAX_AVATAR_BYTES = 2 * 1024 * 1024  # 2 MB
+ALLOWED_AVATAR_EXT = {"jpg", "jpeg", "png", "gif", "webp"}
 
 _pool: Optional[aiomysql.Pool] = None
 
@@ -92,6 +100,20 @@ async def require_account(request: Request) -> dict:
     if not acc:
         raise HTTPException(401, detail={"error": "Not authenticated."})
     return acc
+
+async def get_user_profile(account_id: int) -> dict:
+    """Returns profile data (avatar, signature, location) for an account."""
+    row = await query_one(
+        "SELECT avatar_url, signature, location FROM user_profiles WHERE account_id=%s",
+        (account_id,),
+    )
+    return row or {"avatar_url": None, "signature": None, "location": None}
+
+async def get_post_count(account_id: int) -> int:
+    row = await query_one(
+        "SELECT COUNT(*) AS c FROM forum_posts WHERE author_id=%s", (account_id,),
+    )
+    return (row or {}).get("c", 0) or 0
 
 # ── Roles / Admin ───────────────────────────────────────────────────────────
 async def get_user_roles(account_id: int) -> list[str]:
@@ -235,11 +257,66 @@ async def logout(request: Request, response: Response):
 @api.get("/me")
 async def me(acc: dict = Depends(require_account)):
     roles = await get_user_roles(acc["id"])
+    profile = await get_user_profile(acc["id"])
     out = serialize(acc)
     out["roles"] = roles
     out["isAdmin"] = any(r in {"owner", "admin"} for r in roles)
     out["isMod"]   = any(r in {"owner", "admin", "gm", "mod"} for r in roles)
+    out["avatarUrl"] = profile.get("avatar_url")
+    out["signature"] = profile.get("signature")
+    out["location"]  = profile.get("location")
     return {"account": out}
+
+@api.post("/account/avatar")
+async def upload_avatar(file: UploadFile = File(...), acc: dict = Depends(require_account)):
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_AVATAR_EXT:
+        raise HTTPException(400, detail={"error": "Allowed: jpg, png, gif, webp."})
+    data = await file.read()
+    if len(data) > MAX_AVATAR_BYTES:
+        raise HTTPException(400, detail={"error": "Max 2 MB."})
+
+    fname = f"{acc['id']}_{secrets.token_hex(6)}.{ext}"
+    fpath = UPLOAD_DIR / "avatars" / fname
+    fpath.write_bytes(data)
+
+    # Remove old avatar
+    old = await query_one("SELECT avatar_url FROM user_profiles WHERE account_id=%s", (acc["id"],))
+    if old and old.get("avatar_url"):
+        oldp = UPLOAD_DIR / "avatars" / Path(old["avatar_url"]).name
+        try: oldp.unlink()
+        except Exception: pass
+
+    url = f"{PUBLIC_UPLOADS_PATH}/avatars/{fname}"
+    await exec_sql(
+        "INSERT INTO user_profiles (account_id, avatar_url) VALUES (%s, %s) "
+        "ON DUPLICATE KEY UPDATE avatar_url=VALUES(avatar_url)",
+        (acc["id"], url),
+    )
+    return {"avatarUrl": url}
+
+@api.delete("/account/avatar")
+async def remove_avatar(acc: dict = Depends(require_account)):
+    old = await query_one("SELECT avatar_url FROM user_profiles WHERE account_id=%s", (acc["id"],))
+    if old and old.get("avatar_url"):
+        oldp = UPLOAD_DIR / "avatars" / Path(old["avatar_url"]).name
+        try: oldp.unlink()
+        except Exception: pass
+    await exec_sql(
+        "UPDATE user_profiles SET avatar_url=NULL WHERE account_id=%s", (acc["id"],),
+    )
+    return {"ok": True}
+
+@api.post("/account/profile")
+async def update_profile(body: dict, acc: dict = Depends(require_account)):
+    signature = (body.get("signature") or "")[:500] or None
+    location = (body.get("location") or "")[:60] or None
+    await exec_sql(
+        "INSERT INTO user_profiles (account_id, signature, location) VALUES (%s, %s, %s) "
+        "ON DUPLICATE KEY UPDATE signature=VALUES(signature), location=VALUES(location)",
+        (acc["id"], signature, location),
+    )
+    return {"ok": True, "signature": signature, "location": location}
 
 @api.post("/account/password")
 async def change_pw(body: PwChange, acc: dict = Depends(require_account)):
@@ -349,14 +426,29 @@ def _post_to_api(p: dict, role: Optional[dict] = None) -> dict:
     return out
 
 async def _enrich_posts(posts: list[dict]) -> list[dict]:
-    """Attach top-role info to each post in one pass."""
+    """Attach top-role + avatar + post count + join date to each post."""
     out = []
-    cache: dict[int, dict] = {}
+    role_cache: dict[int, dict] = {}
+    profile_cache: dict[int, dict] = {}
+    count_cache: dict[int, int] = {}
+    join_cache: dict[int, str] = {}
     for p in posts:
         aid = p["author_id"]
-        if aid not in cache:
-            cache[aid] = await top_role(aid)
-        out.append(_post_to_api(p, cache[aid]))
+        if aid not in role_cache:
+            role_cache[aid] = await top_role(aid)
+            profile_cache[aid] = await get_user_profile(aid)
+            count_cache[aid] = await get_post_count(aid)
+            acc = await query_one(
+                "SELECT joindate FROM account WHERE id=%s", (aid,), db=AUTH_DB,
+            )
+            join_cache[aid] = str(acc["joindate"]) if acc and acc.get("joindate") else None
+        item = _post_to_api(p, role_cache[aid])
+        item["avatarUrl"] = profile_cache[aid].get("avatar_url")
+        item["signature"] = profile_cache[aid].get("signature")
+        item["location"] = profile_cache[aid].get("location")
+        item["authorPostCount"] = count_cache[aid]
+        item["authorJoinDate"] = join_cache[aid]
+        out.append(item)
     return out
 
 @api.get("/forum/categories")
@@ -596,6 +688,7 @@ async def shutdown():
         await _pool.wait_closed()
 
 app.include_router(api)
+app.mount(PUBLIC_UPLOADS_PATH, StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ.get("FRONTEND_ORIGIN", "*")],

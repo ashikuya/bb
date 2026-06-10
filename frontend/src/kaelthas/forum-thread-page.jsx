@@ -10,6 +10,13 @@ import {
 import styles from './forum.module.css';
 import pageStyles from './kaelthas.module.css';
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
+function avatarSrc(url) {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
+}
+
 export function ForumThreadPage() {
   const { slug, threadId } = useParams();
   const { account } = useAuth();
@@ -22,26 +29,20 @@ export function ForumThreadPage() {
 
   async function load() {
     setLoading(true);
-    try {
-      const d = await getForumThread(threadId);
-      setData(d);
-    } catch { setData(null); } finally { setLoading(false); }
+    try { setData(await getForumThread(threadId)); }
+    catch { setData(null); }
+    finally { setLoading(false); }
   }
-
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [threadId]);
 
   async function onReply(e) {
     e.preventDefault(); setError(null); setBusy(true);
     try { await replyToThread(threadId, reply); setReply(''); await load(); }
-    catch (err) { setError(err.message); } finally { setBusy(false); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
   }
-
-  async function togglePin() {
-    await adminPinThread(threadId, !data.thread.pinned); await load();
-  }
-  async function toggleLock() {
-    await adminLockThread(threadId, !data.thread.locked); await load();
-  }
+  async function togglePin()    { await adminPinThread(threadId, !data.thread.pinned); await load(); }
+  async function toggleLock()   { await adminLockThread(threadId, !data.thread.locked); await load(); }
   async function deleteThread() {
     if (!window.confirm('Delete entire thread?')) return;
     await adminDeleteThread(threadId);
@@ -75,6 +76,7 @@ export function ForumThreadPage() {
                 </h1>
                 <p className={styles.pageSub}>
                   by <strong>{data.thread.authorName}</strong> · {new Date(data.thread.createdAt).toLocaleString()}
+                  · {data.thread.views} views · {data.thread.replyCount} replies
                 </p>
               </div>
               {isMod && (
@@ -90,13 +92,26 @@ export function ForumThreadPage() {
               )}
             </div>
 
-            <div className={styles.postList}>
-              {data.posts.map((p) => (
-                <div key={p._id} className={styles.post}>
-                  <div className={styles.postAuthor}>
-                    <strong style={{ color: p.roleColor || 'var(--kael-frost-bright)' }}>
+            <div className={styles.wbbPosts}>
+              {data.posts.map((p, i) => (
+                <article key={p._id} className={styles.wbbPost}>
+                  <aside className={styles.wbbAside} style={{
+                    borderRightColor: p.roleBorder || 'rgba(78,165,211,0.4)',
+                  }}>
+                    <div className={styles.wbbAvatar} style={{
+                      borderColor: p.roleBorder || 'var(--kael-panel-border)',
+                    }}>
+                      {avatarSrc(p.avatarUrl) ? (
+                        <img src={avatarSrc(p.avatarUrl)} alt={p.authorName} className={styles.wbbAvatarImg} />
+                      ) : (
+                        <span className={styles.wbbAvatarFallback}>
+                          {p.authorName?.[0]?.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className={styles.wbbAuthor} style={{ color: p.roleColor || 'var(--kael-frost-bright)' }}>
                       {p.authorName}
-                    </strong>
+                    </div>
                     {p.roleName && (
                       <span className={styles.postRoleBadge} style={{
                         color: p.roleColor,
@@ -107,14 +122,34 @@ export function ForumThreadPage() {
                         {p.roleName}
                       </span>
                     )}
-                    <span className={styles.postMeta}>{new Date(p.createdAt).toLocaleString()}</span>
-                    {isMod && (
-                      <button className={styles.postDelete} onClick={() => deletePost(p._id)}
-                        title="Delete post">×</button>
+                    <dl className={styles.wbbMeta}>
+                      <div><dt>Posts</dt><dd>{p.authorPostCount}</dd></div>
+                      {p.authorJoinDate && (
+                        <div><dt>Joined</dt><dd>{new Date(p.authorJoinDate).toLocaleDateString()}</dd></div>
+                      )}
+                      {p.location && (
+                        <div><dt>Location</dt><dd>{p.location}</dd></div>
+                      )}
+                    </dl>
+                  </aside>
+
+                  <div className={styles.wbbMain}>
+                    <header className={styles.wbbHeader}>
+                      <span className={styles.wbbNum}>#{i + 1}</span>
+                      <span className={styles.wbbDate}>
+                        {new Date(p.createdAt).toLocaleString()}
+                      </span>
+                      {isMod && (
+                        <button className={styles.postDelete} onClick={() => deletePost(p._id)}
+                          title="Delete post">×</button>
+                      )}
+                    </header>
+                    <div className={styles.wbbBody}>{p.content}</div>
+                    {p.signature && (
+                      <footer className={styles.wbbSig}>{p.signature}</footer>
                     )}
                   </div>
-                  <div className={styles.postBody}>{p.content}</div>
-                </div>
+                </article>
               ))}
             </div>
 

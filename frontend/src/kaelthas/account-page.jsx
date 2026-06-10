@@ -1,22 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from './auth-context.jsx';
-import { getCharacters, changePassword } from './api.js';
-import { raceNames, classNames, classColors, formatMoney, formatPlaytime } from './wow-data.js';
+import {
+  getCharacters, changePassword,
+  uploadAvatar, removeAvatar, updateProfile, getForumRoles,
+} from './api.js';
+import {
+  raceNames, classNames, classColors, formatMoney, formatPlaytime,
+} from './wow-data.js';
 import { Header } from './header.jsx';
 import { Frost } from './frost.jsx';
 import styles from './account.module.css';
 import pageStyles from './kaelthas.module.css';
 
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+
 export function AccountPage() {
-  const { account, loading, logout } = useAuth();
+  const { account, loading, logout, refresh } = useAuth();
   const navigate = useNavigate();
+  const [tab, setTab] = useState('profile');
   const [characters, setCharacters] = useState([]);
   const [charsLoading, setCharsLoading] = useState(true);
-  const [newPass, setNewPass] = useState('');
-  const [confirmPass, setConfirmPass] = useState('');
-  const [pwMsg, setPwMsg] = useState(null);
-  const [pwBusy, setPwBusy] = useState(false);
+  const [roles, setRoles] = useState([]);
 
   useEffect(() => {
     if (!loading && !account) navigate('/login');
@@ -25,28 +30,16 @@ export function AccountPage() {
   useEffect(() => {
     if (!account) return;
     let active = true;
-    getCharacters()
-      .then((d) => active && setCharacters(d.characters || []))
-      .catch(() => active && setCharacters([]))
+    Promise.all([getCharacters(), getForumRoles()])
+      .then(([c, r]) => {
+        if (!active) return;
+        setCharacters(c.characters || []);
+        setRoles(r);
+      })
+      .catch(() => {})
       .finally(() => active && setCharsLoading(false));
     return () => { active = false; };
   }, [account]);
-
-  async function onChangePassword(e) {
-    e.preventDefault();
-    setPwMsg(null);
-    if (newPass !== confirmPass) {
-      setPwMsg({ ok: false, text: 'Passwords do not match.' }); return;
-    }
-    setPwBusy(true);
-    try {
-      await changePassword(newPass);
-      setPwMsg({ ok: true, text: 'Password updated successfully.' });
-      setNewPass(''); setConfirmPass('');
-    } catch (err) {
-      setPwMsg({ ok: false, text: err.message || 'Failed to update password.' });
-    } finally { setPwBusy(false); }
-  }
 
   async function onLogout() { await logout(); navigate('/'); }
 
@@ -60,82 +53,236 @@ export function AccountPage() {
     );
   }
 
+  const userRoles = (account.roles || []).map((s) =>
+    roles.find((r) => r.slug === s) || { slug: s, name: s, color: '#cdd9e6' }
+  );
+
   return (
     <div className={pageStyles.page}>
       <Frost count={40} />
       <Header />
       <div className={styles.wrap}>
         <Link to="/" className={styles.backLink}>← Back to Homepage</Link>
-        <div className={styles.headerRow}>
-          <h1 className={styles.welcome}>
-            Welcome, <span>{account.username}</span>
-          </h1>
-          <button type="button" className={styles.logoutBtn} onClick={onLogout}>Log Out</button>
-        </div>
 
-        <div className={styles.grid}>
-          <div className={styles.panel}>
-            <h2 className={styles.panelTitle}>Account Details</h2>
-            <div className={styles.infoRow}><span className={styles.infoLabel}>Account Name</span><span className={styles.infoValue}>{account.username}</span></div>
-            <div className={styles.infoRow}><span className={styles.infoLabel}>Email</span><span className={styles.infoValue}>{account.email}</span></div>
-            <div className={styles.infoRow}><span className={styles.infoLabel}>Member Since</span><span className={styles.infoValue}>{account.joinDate ? new Date(account.joinDate).toLocaleDateString() : '—'}</span></div>
-            <div className={styles.infoRow}><span className={styles.infoLabel}>Status</span><span className={account.online ? styles.statusOnline : styles.statusOffline}>{account.online ? '● Online' : '○ Offline'}</span></div>
-            <div className={styles.infoRow}><span className={styles.infoLabel}>Expansion</span><span className={styles.infoValue}>WotLK 3.3.5a</span></div>
-          </div>
-
-          <div className={styles.panel}>
-            <h2 className={styles.panelTitle}>Change Password</h2>
-            <form onSubmit={onChangePassword}>
-              {pwMsg && (
-                <div className={`${styles.msg} ${pwMsg.ok ? styles.msgSuccess : styles.msgError}`}>{pwMsg.text}</div>
-              )}
-              <div className={styles.field}>
-                <label className={styles.label} htmlFor="np">New Password</label>
-                <input id="np" type="password" className={styles.input} value={newPass}
-                  onChange={(e) => setNewPass(e.target.value)} placeholder="4-16 characters" autoComplete="new-password" />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label} htmlFor="cp">Confirm Password</label>
-                <input id="cp" type="password" className={styles.input} value={confirmPass}
-                  onChange={(e) => setConfirmPass(e.target.value)} placeholder="Repeat new password" autoComplete="new-password" />
-              </div>
-              <button type="submit" className={styles.smallBtn} disabled={pwBusy}>
-                {pwBusy ? 'Updating...' : 'Update Password'}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <div className={styles.panel} style={{ marginBottom: '1.5rem' }}>
-          <h2 className={styles.panelTitle}>Your Characters</h2>
-          {charsLoading ? (
-            <div className={styles.empty}>Loading characters...</div>
-          ) : characters.length === 0 ? (
-            <div className={styles.empty}>No characters yet. Log in to the game to create your first hero!</div>
-          ) : (
-            <div className={styles.charList}>
-              {characters.map((c) => (
-                <div key={c.guid} className={styles.charCard}>
-                  <div className={styles.charLevel}>{c.level}</div>
-                  <div className={styles.charInfo}>
-                    <p className={styles.charName} style={{ color: classColors[c.class] || '#fff' }}>{c.name}</p>
-                    <p className={styles.charMeta}>
-                      {raceNames[c.race] || 'Unknown'} {classNames[c.class] || 'Unknown'} · {formatPlaytime(c.totalPlaytime)} played
-                    </p>
-                  </div>
-                  <div className={styles.charMoney}>{formatMoney(c.money)}</div>
-                </div>
+        <div className={styles.profileHeader}>
+          <ProfileAvatar account={account} onChange={refresh} />
+          <div className={styles.profileMeta}>
+            <h1 className={styles.welcome}>{account.username}</h1>
+            <div className={styles.profileRoles}>
+              {userRoles.map((r) => (
+                <span key={r.slug} className={styles.profileRoleBadge} style={{
+                  color: r.color, background: r.badge_bg || 'rgba(78,165,211,0.15)',
+                  border: `1px solid ${r.badge_border || 'rgba(78,165,211,0.5)'}`,
+                }}>
+                  {r.icon && <span className={styles.profileRoleIcon}>{r.icon}</span>}
+                  {r.name || r.slug}
+                </span>
               ))}
             </div>
+            <p className={styles.profileEmail}>{account.email || '—'}</p>
+          </div>
+          <div className={styles.profileActions}>
+            {account.isAdmin && (
+              <Link to="/admin" className={styles.adminBtn}>⚔ Admin Panel</Link>
+            )}
+            <button type="button" className={styles.logoutBtn} onClick={onLogout}>Log Out</button>
+          </div>
+        </div>
+
+        <div className={styles.tabs}>
+          {[['profile', 'Profile'], ['characters', 'Characters'], ['security', 'Security']].map(
+            ([k, label]) => (
+              <button key={k} className={tab === k ? styles.tabActive : styles.tab}
+                onClick={() => setTab(k)}>{label}</button>
+            )
           )}
         </div>
 
+        {tab === 'profile' && <ProfileTab account={account} onSaved={refresh} />}
+        {tab === 'characters' && (
+          <CharactersTab characters={characters} loading={charsLoading} />
+        )}
+        {tab === 'security' && <SecurityTab />}
+
         <div className={styles.realmBox}>
-          <strong>How to connect:</strong> Open <code>WoW/Data/enUS/realmlist.wtf</code> (or your locale folder) and
-          set: <code>set realmlist logon.kaelthas.com</code>. Make sure your client is version <code>3.3.5a (build 12340)</code>.
-          Then log in with your account name and password above.
+          <strong>How to connect:</strong> Open <code>WoW/Data/enUS/realmlist.wtf</code>
+          and set: <code>set realmlist logon.kaelthas.com</code>. Client version <code>3.3.5a (build 12340)</code>.
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Avatar widget ──────────────────────────────────────────────────────────
+function ProfileAvatar({ account, onChange }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+
+  async function onPick(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    setBusy(true);
+    try {
+      await uploadAvatar(file);
+      if (onChange) await onChange();
+    } catch (err) { alert(err.message || 'Upload failed.'); }
+    finally { setBusy(false); e.target.value = ''; }
+  }
+
+  async function onRemove() {
+    if (!window.confirm('Remove your avatar?')) return;
+    setBusy(true);
+    try {
+      await removeAvatar();
+      if (onChange) await onChange();
+    } finally { setBusy(false); }
+  }
+
+  const avatarSrc = account.avatarUrl
+    ? (account.avatarUrl.startsWith('http') ? account.avatarUrl : `${BACKEND_URL}${account.avatarUrl}`)
+    : null;
+
+  return (
+    <div className={styles.avatarWrap}>
+      <div className={styles.avatar}>
+        {avatarSrc ? (
+          <img src={avatarSrc} alt="avatar" className={styles.avatarImg} />
+        ) : (
+          <span className={styles.avatarFallback}>
+            {account.username?.[0]?.toUpperCase()}
+          </span>
+        )}
+      </div>
+      <div className={styles.avatarActions}>
+        <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp"
+          onChange={onPick} hidden />
+        <button type="button" className={styles.avatarBtn}
+          disabled={busy} onClick={() => inputRef.current?.click()}>
+          {busy ? 'Uploading...' : 'Change Avatar'}
+        </button>
+        {account.avatarUrl && (
+          <button type="button" className={styles.avatarBtnGhost} onClick={onRemove} disabled={busy}>
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile Tab ────────────────────────────────────────────────────────────
+function ProfileTab({ account, onSaved }) {
+  const [signature, setSignature] = useState(account.signature || '');
+  const [location, setLocation] = useState(account.location || '');
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save(e) {
+    e.preventDefault(); setMsg(null); setBusy(true);
+    try {
+      await updateProfile({ signature, location });
+      setMsg({ ok: true, text: 'Profile saved.' });
+      if (onSaved) await onSaved();
+    } catch (err) { setMsg({ ok: false, text: err.message || 'Failed.' }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className={styles.panel}>
+      <h2 className={styles.panelTitle}>Forum Profile</h2>
+      <form onSubmit={save}>
+        {msg && (
+          <div className={`${styles.msg} ${msg.ok ? styles.msgSuccess : styles.msgError}`}>
+            {msg.text}
+          </div>
+        )}
+        <div className={styles.field}>
+          <label className={styles.label}>Location</label>
+          <input className={styles.input} value={location} maxLength={60}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="e.g. Stormwind, Frostmourne Citadel" />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Signature (shown under your forum posts)</label>
+          <textarea className={styles.input} value={signature} rows={3} maxLength={500}
+            onChange={(e) => setSignature(e.target.value)}
+            placeholder="A short signature for your forum posts..." />
+        </div>
+        <button type="submit" className={styles.smallBtn} disabled={busy}>
+          {busy ? 'Saving...' : 'Save Profile'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ─── Characters Tab ─────────────────────────────────────────────────────────
+function CharactersTab({ characters, loading }) {
+  if (loading) return <div className={styles.empty}>Loading characters...</div>;
+  if (characters.length === 0) {
+    return <div className={styles.empty}>No characters yet. Log in to the game to create your first hero!</div>;
+  }
+  return (
+    <div className={styles.charList}>
+      {characters.map((c) => (
+        <div key={c.guid} className={styles.charCard}>
+          <div className={styles.charLevel}>{c.level}</div>
+          <div className={styles.charInfo}>
+            <p className={styles.charName} style={{ color: classColors[c.class] || '#fff' }}>{c.name}</p>
+            <p className={styles.charMeta}>
+              {raceNames[c.race] || 'Unknown'} {classNames[c.class] || 'Unknown'} · {formatPlaytime(c.totalPlaytime)} played
+            </p>
+          </div>
+          <div className={styles.charMoney}>{formatMoney(c.money)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Security Tab ───────────────────────────────────────────────────────────
+function SecurityTab() {
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault(); setMsg(null);
+    if (newPass !== confirmPass) {
+      setMsg({ ok: false, text: 'Passwords do not match.' }); return;
+    }
+    setBusy(true);
+    try {
+      await changePassword(newPass);
+      setMsg({ ok: true, text: 'Password updated. Game login now uses new password.' });
+      setNewPass(''); setConfirmPass('');
+    } catch (err) { setMsg({ ok: false, text: err.message || 'Failed.' }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className={styles.panel}>
+      <h2 className={styles.panelTitle}>Change Password</h2>
+      <form onSubmit={submit}>
+        {msg && (
+          <div className={`${styles.msg} ${msg.ok ? styles.msgSuccess : styles.msgError}`}>
+            {msg.text}
+          </div>
+        )}
+        <div className={styles.field}>
+          <label className={styles.label}>New Password</label>
+          <input type="password" className={styles.input} value={newPass}
+            onChange={(e) => setNewPass(e.target.value)} placeholder="4-16 characters" />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Confirm Password</label>
+          <input type="password" className={styles.input} value={confirmPass}
+            onChange={(e) => setConfirmPass(e.target.value)} placeholder="Repeat new password" />
+        </div>
+        <button type="submit" className={styles.smallBtn} disabled={busy}>
+          {busy ? 'Updating...' : 'Update Password'}
+        </button>
+      </form>
     </div>
   );
 }

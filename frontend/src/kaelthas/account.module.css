@@ -309,3 +309,119 @@
   border-radius: 4px;
   font-family: monospace;
 }
+
+/* ── Profile Header (UCP) ─────────────────────────────────────── */
+.profileHeader {
+  display: flex;
+  gap: 1.8rem;
+  background: var(--kael-panel);
+  border: 1px solid var(--kael-panel-border);
+  border-radius: 12px;
+  padding: 1.6rem 1.8rem;
+  margin-bottom: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.avatarWrap { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; }
+
+.avatar {
+  width: 110px;
+  height: 110px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(78,165,211,0.25), rgba(18,48,74,0.55));
+  border: 2px solid var(--kael-frost);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 0 22px rgba(78,165,211,0.35), inset 0 0 20px rgba(78,165,211,0.1);
+}
+.avatarImg { width: 100%; height: 100%; object-fit: cover; }
+.avatarFallback {
+  font-family: var(--kael-font-display);
+  font-size: 3rem;
+  color: var(--kael-frost-bright);
+  font-weight: 800;
+  text-shadow: 0 0 20px rgba(78,165,211,0.6);
+}
+
+.avatarActions { display: flex; flex-direction: column; gap: 0.4rem; align-items: center; }
+.avatarBtn, .avatarBtnGhost {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.85rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: var(--kael-font-display);
+  transition: all 0.2s;
+}
+.avatarBtn {
+  background: linear-gradient(180deg, rgba(46,110,150,0.55), rgba(18,48,74,0.85));
+  border: 1px solid var(--kael-frost);
+  color: var(--kael-frost-bright);
+}
+.avatarBtn:hover { box-shadow: var(--kael-shadow-glow); color: #fff; }
+.avatarBtnGhost {
+  background: transparent;
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  color: #ff9b9b;
+}
+.avatarBtnGhost:hover { background: rgba(255,107,107,0.12); }
+
+.profileMeta { flex: 1; min-width: 220px; }
+.profileRoles {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin: 0.5rem 0 0.6rem;
+}
+.profileRoleBadge {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.22rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.profileRoleIcon { font-family: var(--kael-font-display); font-weight: 800; }
+.profileEmail { color: var(--kael-text-dim); font-size: 0.9rem; margin: 0; }
+
+.profileActions { display: flex; flex-direction: column; gap: 0.5rem; }
+.adminBtn {
+  text-decoration: none;
+  padding: 0.6rem 1.2rem;
+  background: linear-gradient(135deg, #ff9b3d, #ff6ad5);
+  color: #fff;
+  border-radius: 6px;
+  font-family: var(--kael-font-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 0 22px rgba(255,155,61,0.4);
+  transition: all 0.2s;
+}
+.adminBtn:hover { transform: translateY(-1px); box-shadow: 0 0 28px rgba(255,155,61,0.6); }
+
+/* ── Tabs ─────────────────────────────────────────────────────── */
+.tabs { display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
+.tab, .tabActive {
+  padding: 0.65rem 1.3rem;
+  background: var(--kael-panel);
+  border: 1px solid var(--kael-panel-border);
+  color: var(--kael-text-dim);
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-family: var(--kael-font-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.74rem;
+  transition: all 0.2s;
+}
+.tab:hover { color: var(--kael-frost); border-color: var(--kael-frost); }
+.tabActive {
+  color: var(--kael-frost-bright);
+  border-color: var(--kael-frost);
+  background: linear-gradient(180deg, rgba(46,110,150,0.4), rgba(18,48,74,0.7));
+  box-shadow: var(--kael-shadow-glow);
+}
