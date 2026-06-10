@@ -1,5 +1,6 @@
 :global(body) {
   margin: 0;
+  background: #05070c;
 }
 
 :global(:root) {
