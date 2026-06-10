@@ -37,6 +37,8 @@ export function Hero() {
       </div>
 
       <div className={styles.heroContent}>
+        <div className={styles.heroKicker}>Wrath of the Lich King</div>
+
         <h1 className={styles.heroTitle}>
           KAELTHAS
           <span>Der Frostthron erwartet dich</span>
