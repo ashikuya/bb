@@ -28,10 +28,6 @@ export function Journey() {
         <p className={styles.statLine}>
           Erstellte Charaktere: <strong>{characters.toLocaleString('de-DE')}</strong>
         </p>
-        <div className={styles.onlinePill}>
-          <span className={styles.onlineDot} />
-          {online} Spieler online
-        </div>
       </div>
     </section>
   );
