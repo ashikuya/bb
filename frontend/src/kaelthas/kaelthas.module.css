@@ -386,8 +386,8 @@
 }
 
 .heroTitle {
-  font-family: 'Cinzel Decorative', 'Cinzel', 'Trajan Pro', Georgia, serif;
-  font-weight: 900;
+  font-family: 'Marcellus SC', 'Marcellus', 'Cinzel', Georgia, serif;
+  font-weight: 400;
   font-size: clamp(3rem, 9vw, 6.5rem);
   line-height: 1;
   margin: 0 0 1rem;
@@ -414,9 +414,9 @@
 
 .heroTitle span {
   display: block;
-  font-family: 'Cinzel Decorative', 'Cinzel', serif;
+  font-family: 'Marcellus SC', 'Marcellus', 'Cinzel', serif;
   font-size: 0.2em;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.28em;
   margin-top: 1.4rem;
   color: var(--kael-gold);
